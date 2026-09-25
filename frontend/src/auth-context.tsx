@@ -20,7 +20,7 @@ type AuthContextType = {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string, referralCode?: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -119,11 +119,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(data.user);
   }, []);
 
-  const register = useCallback(async (name: string, email: string, password: string) => {
+  const register = useCallback(async (name: string, email: string, password: string, referralCode?: string) => {
     const data = await api<{ token: string; user: User }>("/auth/register", {
       method: "POST",
       auth: false,
-      body: { name, email, password },
+      body: { name, email, password, referral_code: referralCode || null },
     });
     await setToken(data.token);
     setUser(data.user);

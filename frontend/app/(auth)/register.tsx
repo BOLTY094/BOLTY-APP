@@ -21,6 +21,7 @@ export default function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [referral, setReferral] = useState("");
   const [loading, setLoading] = useState(false);
 
   const onRegister = async () => {
@@ -34,7 +35,7 @@ export default function Register() {
     }
     setLoading(true);
     try {
-      await register(name.trim(), email.trim(), password);
+      await register(name.trim(), email.trim(), password, referral.trim() || undefined);
     } catch (e: any) {
       show(e.message || "Registrazione non riuscita", "error");
     } finally {
@@ -58,6 +59,7 @@ export default function Register() {
       <TextField label="Nome e cognome" value={name} onChangeText={setName} placeholder="Mario Rossi" autoCapitalize="words" testID="register-name" />
       <TextField label="Email" value={email} onChangeText={setEmail} placeholder="nome@email.it" keyboardType="email-address" autoCapitalize="none" testID="register-email" />
       <TextField label="Password" value={password} onChangeText={setPassword} placeholder="Almeno 6 caratteri" secureTextEntry testID="register-password" />
+      <TextField label="Codice invito" value={referral} onChangeText={setReferral} placeholder="Es. A1B2C3" autoCapitalize="characters" optional testID="register-referral" />
 
       <Button title="Registrati" onPress={onRegister} loading={loading} testID="register-submit" />
 

@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { Bell, SignOut, Lightning, Flame, WifiHigh, ArrowRight } from "phosphor-react-native";
+import { Bell, SignOut, Lightning, Flame, WifiHigh, ArrowRight, Gift } from "phosphor-react-native";
 
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
@@ -104,7 +104,19 @@ export default function Home() {
         </View>
       </View>
 
-      {/* Recent bills */}
+      {/* Referral promo */}
+      <View style={s.section}>
+        <Pressable style={s.referral} onPress={() => router.push("/referral")} testID="home-referral">
+          <View style={s.referralIcon}>
+            <Gift size={24} color={colors.brand} weight="fill" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.referralTitle}>Invita e Guadagna</Text>
+            <Text style={s.referralSub}>Guadagni un premio per ogni amico che attiva un’offerta.</Text>
+          </View>
+          <ArrowRight size={20} color={colors.brand} weight="bold" />
+        </Pressable>
+      </View>
       {recent.length > 0 ? (
         <View style={s.section}>
           <View style={s.sectionHead}>
@@ -201,6 +213,10 @@ const useStyles = makeStyles((colors) => ({
   },
   billIcon: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
   tipCard: { backgroundColor: colors.brandTertiary, borderRadius: radius.lg, padding: spacing.lg },
+  referral: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.accentSoft, borderRadius: radius.lg, padding: spacing.lg, borderWidth: 1, borderColor: colors.accent },
+  referralIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.accent, alignItems: "center", justifyContent: "center" },
+  referralTitle: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.brand },
+  referralSub: { fontFamily: fonts.regular, fontSize: fontSize.base, color: colors.onSurfaceTertiary, marginTop: 2 },
 }));
 
 function StyleSheetAbsolute() {

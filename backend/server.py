@@ -54,6 +54,8 @@ ADMIN_EMAIL = os.environ["ADMIN_EMAIL"]
 ADMIN_PASSWORD = os.environ["ADMIN_PASSWORD"]
 ADMIN_NAME = os.environ.get("ADMIN_NAME", "Admin")
 
+REFERRAL_REWARD = float(os.environ.get("REFERRAL_REWARD", "20"))
+
 app = FastAPI(title="BOLTY API")
 api_router = APIRouter(prefix="/api")
 
@@ -76,6 +78,19 @@ def now_utc() -> datetime:
 
 def make_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:12]}"
+
+
+async def ensure_referral_code(user: dict) -> str:
+    if user and user.get("referral_code"):
+        return user["referral_code"]
+    for _ in range(10):
+        code = uuid.uuid4().hex[:6].upper()
+        if not await db.users.find_one({"referral_code": code}):
+            await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"referral_code": code}})
+            return code
+    code = user["user_id"][-6:].upper()
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"referral_code": code}})
+    return code
 
 
 # ---------------------------------------------------------------------------
@@ -324,6 +339,7 @@ class RegisterInput(BaseModel):
     name: str
     email: EmailStr
     password: str
+    referral_code: Optional[str] = None
 
 
 class LoginInput(BaseModel):
@@ -403,6 +419,11 @@ async def register(inp: RegisterInput):
     existing = await db.users.find_one({"email": inp.email.lower()})
     if existing:
         raise HTTPException(status_code=400, detail="Email già registrata")
+    referred_by = None
+    if inp.referral_code:
+        ref = await db.users.find_one({"referral_code": inp.referral_code.strip().upper()})
+        if ref:
+            referred_by = ref["user_id"]
     user = {
         "user_id": make_id("usr"),
         "name": inp.name,
@@ -410,6 +431,9 @@ async def register(inp: RegisterInput):
         "password_hash": hash_password(inp.password),
         "role": "customer",
         "auth_provider": "email",
+        "referral_code": uuid.uuid4().hex[:6].upper(),
+        "referred_by": referred_by,
+        "reward_balance": 0.0,
         "created_at": now_utc().isoformat(),
     }
     await db.users.insert_one(user)
@@ -691,6 +715,29 @@ async def create_contract(inp: ContractInput, user: dict = Depends(get_current_u
     }
     await db.contracts.insert_one(contract)
     await db.offers.update_one({"offer_id": inp.offer_id}, {"$set": {"status": "accettata"}})
+
+    # Referral reward: reward the referrer the first time this friend activates an offer
+    buyer = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    referrer_id = buyer.get("referred_by") if buyer else None
+    if referrer_id and referrer_id != user["user_id"]:
+        already = await db.rewards.find_one({"referrer_id": referrer_id, "referred_user_id": user["user_id"]})
+        if not already:
+            await db.rewards.insert_one({
+                "reward_id": make_id("rwd"),
+                "referrer_id": referrer_id,
+                "referred_user_id": user["user_id"],
+                "referred_name": user.get("name"),
+                "amount": REFERRAL_REWARD,
+                "status": "accreditato",
+                "created_at": now_utc().isoformat(),
+            })
+            await db.users.update_one({"user_id": referrer_id}, {"$inc": {"reward_balance": REFERRAL_REWARD}})
+            await notify(
+                referrer_id, "Premio invito guadagnato!",
+                f"Un tuo amico ha attivato un'offerta con Bolty. Hai guadagnato <strong>€ {REFERRAL_REWARD:.0f}</strong> in premi! 🎉",
+                "Hai guadagnato un premio — BOLTY",
+            )
+
     await notify(
         user["user_id"], "Richiesta ricevuta",
         f"Abbiamo ricevuto la tua richiesta per l'offerta <strong>{escape(offer.get('provider_name',''))}</strong>. La tua pratica è ora <strong>in lavorazione</strong>.",
@@ -715,6 +762,23 @@ async def list_notifications(user: dict = Depends(get_current_user)):
 async def mark_notifications_read(user: dict = Depends(get_current_user)):
     await db.notifications.update_many({"user_id": user["user_id"]}, {"$set": {"read": True}})
     return {"ok": True}
+
+
+@api_router.get("/referral")
+async def get_referral(user: dict = Depends(get_current_user)):
+    full = await db.users.find_one({"user_id": user["user_id"]})
+    code = await ensure_referral_code(full)
+    rewards = await db.rewards.find({"referrer_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    invited = await db.users.count_documents({"referred_by": user["user_id"]})
+    total = sum(float(r.get("amount", 0)) for r in rewards)
+    return {
+        "code": code,
+        "invited_count": invited,
+        "activated_count": len(rewards),
+        "rewards_total": round(total, 2),
+        "reward_per_friend": REFERRAL_REWARD,
+        "rewards": rewards,
+    }
 
 
 # ---------------------------------------------------------------------------

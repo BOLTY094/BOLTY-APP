@@ -31,6 +31,7 @@ Piattaforma mobile dove il cliente carica la bolletta (luce/gas/telefonia), rice
 - [x] Area cliente tabs: Home, Forniture, Bollette (storico + filtri + carica), Offerte.
 - [x] Area admin: Dashboard (statistiche + valore generato), Da analizzare, Bill detail + proponi offerta, Contratti + aggiornamento stato.
 - [x] Notifiche in-app + email (Resend) su tutti gli eventi chiave.
+- [x] Invita e Guadagna: codice invito per ogni cliente, campo codice in registrazione, premio (€20 configurabile) al referrer quando l'amico attiva un'offerta, schermata dedicata con stats e storico premi.
 - [x] Testing: 8/8 backend pytest + flussi frontend validati.
 
 ## Backlog (prioritized)
