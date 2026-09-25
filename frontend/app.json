@@ -10,6 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.emergent.utilityanalyzer.irxvru",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Scatta una foto della tua bolletta da analizzare",
         "NSPhotoLibraryUsageDescription": "Carica la foto della bolletta dalla galleria"
@@ -50,6 +51,7 @@
       "expo-image",
       "expo-secure-store",
       "expo-web-browser",
+      "expo-apple-authentication",
       "expo-status-bar"
     ],
     "experiments": {

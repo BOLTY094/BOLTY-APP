@@ -56,6 +56,17 @@ ADMIN_NAME = os.environ.get("ADMIN_NAME", "Admin")
 
 REFERRAL_REWARD = float(os.environ.get("REFERRAL_REWARD", "20"))
 
+APPLE_AUDIENCES = [a.strip() for a in os.environ.get("APPLE_AUDIENCES", "").split(",") if a.strip()]
+APPLE_ISSUER = "https://appleid.apple.com"
+_apple_jwk_client = None
+
+
+def apple_jwk_client():
+    global _apple_jwk_client
+    if _apple_jwk_client is None:
+        _apple_jwk_client = jwt.PyJWKClient("https://appleid.apple.com/auth/keys")
+    return _apple_jwk_client
+
 app = FastAPI(title="BOLTY API")
 api_router = APIRouter(prefix="/api")
 
@@ -351,6 +362,12 @@ class SessionInput(BaseModel):
     session_id: str
 
 
+class AppleInput(BaseModel):
+    identity_token: str
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+
+
 CATEGORIES = {"luce", "gas", "telefonia"}
 
 
@@ -497,6 +514,72 @@ async def logout(authorization: Optional[str] = Header(None)):
         token = authorization.split(" ", 1)[1].strip()
         await db.user_sessions.delete_one({"session_token": token})
     return {"ok": True}
+
+
+@api_router.post("/auth/apple")
+async def apple_auth(inp: AppleInput):
+    if not APPLE_AUDIENCES:
+        raise HTTPException(status_code=500, detail="Apple Sign-In non configurato")
+    try:
+        signing_key = await run_in_threadpool(
+            lambda: apple_jwk_client().get_signing_key_from_jwt(inp.identity_token)
+        )
+        claims = jwt.decode(
+            inp.identity_token,
+            signing_key.key,
+            algorithms=["RS256"],
+            audience=APPLE_AUDIENCES,
+            issuer=APPLE_ISSUER,
+        )
+    except Exception as e:
+        logger.error(f"Apple token verify failed: {e}")
+        raise HTTPException(status_code=401, detail="Token Apple non valido")
+
+    apple_sub = claims.get("sub")
+    if not apple_sub:
+        raise HTTPException(status_code=401, detail="Token Apple non valido")
+
+    email = (inp.email or claims.get("email") or "").lower() or None
+
+    existing = await db.users.find_one({"apple_sub": apple_sub})
+    if not existing and email:
+        existing = await db.users.find_one({"email": email})
+
+    if existing:
+        user_id = existing["user_id"]
+        set_fields = {"apple_sub": apple_sub}
+        # Persist name/email only on first sign-in; never overwrite with nulls
+        if not existing.get("email") and email:
+            set_fields["email"] = email
+        if (not existing.get("name") or existing.get("name") == "Utente Apple") and inp.name:
+            set_fields["name"] = inp.name
+        await db.users.update_one({"user_id": user_id}, {"$set": set_fields})
+    else:
+        user_id = make_id("usr")
+        doc = {
+            "user_id": user_id,
+            "name": inp.name or (email.split("@")[0] if email else "Utente Apple"),
+            "apple_sub": apple_sub,
+            "role": "customer",
+            "auth_provider": "apple",
+            "referral_code": uuid.uuid4().hex[:6].upper(),
+            "referred_by": None,
+            "reward_balance": 0.0,
+            "created_at": now_utc().isoformat(),
+        }
+        if email:
+            doc["email"] = email
+        await db.users.insert_one(doc)
+
+    session_token = f"apple_{uuid.uuid4().hex}"
+    await db.user_sessions.insert_one({
+        "session_token": session_token,
+        "user_id": user_id,
+        "expires_at": now_utc() + timedelta(days=7),
+        "created_at": now_utc(),
+    })
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    return {"token": session_token, "session_token": session_token, "user": user}
 
 
 # ---------------------------------------------------------------------------
@@ -913,8 +996,14 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     try:
-        await db.users.create_index("email", unique=True)
+        # email may be absent for Apple private-relay users -> sparse unique
+        try:
+            await db.users.drop_index("email_1")
+        except Exception:
+            pass
+        await db.users.create_index("email", unique=True, sparse=True)
         await db.users.create_index("user_id", unique=True)
+        await db.users.create_index("apple_sub", unique=True, sparse=True)
         await db.user_sessions.create_index("session_token", unique=True)
         await db.user_sessions.create_index("expires_at", expireAfterSeconds=0)
         await db.bills.create_index("user_id")

@@ -1,8 +1,9 @@
-import React, { useState } from "react";
-import { View, Text, Pressable } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, Text, Pressable, Platform } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import * as AppleAuthentication from "expo-apple-authentication";
 import { GoogleLogo } from "phosphor-react-native";
 
 import { useAuth } from "@/src/auth-context";
@@ -16,13 +17,29 @@ export default function Login() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { login, loginWithGoogle } = useAuth();
+  const { login, loginWithGoogle, loginWithApple } = useAuth();
   const { show } = useToast();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [gLoading, setGLoading] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS === "ios") {
+      AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => setAppleAvailable(false));
+    }
+  }, []);
+
+  const onApple = async () => {
+    try {
+      await loginWithApple();
+    } catch (e: any) {
+      if (e?.code === "ERR_REQUEST_CANCELED") return;
+      show(e.message || "Accesso Apple non riuscito", "error");
+    }
+  };
 
   const onLogin = async () => {
     if (!email || !password) {
@@ -97,6 +114,17 @@ export default function Login() {
         testID="login-google"
       />
 
+      {appleAvailable ? (
+        <AppleAuthentication.AppleAuthenticationButton
+          buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+          buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+          cornerRadius={12}
+          style={s.appleBtn}
+          onPress={onApple}
+          testID="login-apple"
+        />
+      ) : null}
+
       <Pressable onPress={() => router.push("/(auth)/register")} style={s.footer} testID="go-register">
         <Text style={s.footerText}>
           Non hai un account? <Text style={s.footerLink}>Registrati</Text>
@@ -121,6 +149,7 @@ const useStyles = makeStyles((colors) => ({
   logo: { fontFamily: fonts.bold, fontSize: 30, color: colors.brandPrimary, letterSpacing: 1 },
   divider: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginVertical: spacing.xl },
   line: { flex: 1, height: 1, backgroundColor: colors.divider },
+  appleBtn: { height: 54, marginTop: spacing.md },
   footer: { alignItems: "center", marginTop: spacing.xl },
   footerText: { color: colors.muted, fontFamily: fonts.regular, fontSize: fontSize.base },
   footerLink: { color: colors.brandPrimary, fontFamily: fonts.semibold },

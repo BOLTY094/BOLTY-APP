@@ -1,0 +1,36 @@
+{
+  "summary": "Apple Sign-In backend contract + auth regressions verified. 21/21 pytest passing (13 new in test_apple_auth.py + 8 existing in backend_test.py). POST /api/auth/apple returns 401 for invalid/malformed identity_token, 422 for missing identity_token or empty body. Regressions: register (sparse email index intact + email lowercased server-side), mario@test.it/Test1234 -> 200 role=customer, admin@bolty.it/Bolty!Admin2026 -> 200 role=admin, /auth/me works with JWT bearer. Session-token Apple path validated by seeding a doc in user_sessions collection (session_token, user_id=mario, timezone-aware expires_at now+7d) and calling /auth/me with that token — get_user_by_token honors it and returns mario's user; expired session_token correctly rejected with 401. Sparse-unique apple_sub + sparse-unique email indexes verified by inserting two apple users without email into MongoDB (no duplicate key error). End-to-end referral reward flow re-verified with mario's code E20BE6: new customer registered with referral_code=E20BE6, uploads bill, admin proposes offer, customer accepts contract, mario's referral counters increment (activated_count +1, rewards_total +20€). Frontend web preview: login screen renders correctly (email/password + Google button, no red screen). Apple button correctly hidden on web (isAvailableAsync gate — data-testid=login-apple absent, 'Apple' string not in DOM). Mario login end-to-end through UI works: lands on home screen with 'Ciao, Mario' and 'Analizza la mia bolletta'. Deprecated packages detected: none. SafeAreaView issues detected: none.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_apple_auth.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/apple_auth_results.xml"
+  ],
+  "action_items": [
+    "Real Apple identity-token verification (RS256 vs Apple JWKS) can only be validated on a REAL iOS device — owner should run the manual Apple Sign-In flow once from an iPhone as per /app/auth_testing.md.",
+    "Optional: also cover the 'invalid audience' path (a JWT signed with a random RS256 key) to explicitly assert JWKS lookup failure surfaces as 401 rather than 500 — current tests cover malformed tokens which already exercise the JWKS path via jwt.PyJWKClient."
+  ],
+  "critical_code_review_comments": [
+    "POST /api/auth/apple correctly wraps signing-key fetch + jwt.decode in try/except returning 401 (never 500 for token issues). APPLE_AUDIENCES guard returns 500 only when the server itself is misconfigured (acceptable).",
+    "get_user_by_token first tries user_sessions (Google + Apple share this table with `apple_` prefix on token), then falls back to JWT decode — Apple's returned session_token works transparently with /auth/me and every authed endpoint.",
+    "users.apple_sub index is unique+sparse and users.email switched to sparse-unique, allowing Apple-only users without email (verified by direct MongoDB insert test).",
+    "AppleInput uses Optional[EmailStr] for email; email lowercased before persisting (consistent with register).",
+    "Frontend login.tsx correctly gates AppleAuthenticationButton behind Platform.OS==='ios' + AppleAuthentication.isAvailableAsync() — the button is not rendered on web/Android, verified in browser."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_apple_auth.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Test suite seeds transient user_sessions docs (cleaned up in finally blocks), a couple of transient users.apple_sub-only docs (cleaned up), and TEST_-prefixed customer/bill/offer/contract rows created via public API for the referral flow (left in DB since they follow the existing convention).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All Apple Sign-In backend behavior + regression coverage lives in /app/backend/tests/test_apple_auth.py. Run: EXPO_PUBLIC_BACKEND_URL=<preview url> MONGO_URL=mongodb://localhost:27017 DB_NAME=test_database pytest backend/tests -v. The native Apple button + real identity token can only be tested on a real iOS device; do not attempt in automation. Session-token seeding pattern (insert user_sessions doc with timezone-aware expires_at, use its session_token as Bearer) is the canonical way to exercise post-Apple authenticated flows without a real Apple token.",
+  "rca_of_issue": "N/A — no regressions or bugs found. Apple Sign-In endpoint and index changes behave as specified."
+}

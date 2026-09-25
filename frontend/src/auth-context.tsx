@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { Platform } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
+import * as AppleAuthentication from "expo-apple-authentication";
 
 import { api, setToken, clearToken, loadToken } from "@/src/api";
 
@@ -22,6 +23,7 @@ type AuthContextType = {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string, referralCode?: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
+  loginWithApple: () => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -166,6 +168,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const loginWithApple = useCallback(async () => {
+    const credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+    });
+    const identityToken = credential.identityToken;
+    if (!identityToken) throw new Error("Apple: token mancante");
+    const fullName = credential.fullName
+      ? [credential.fullName.givenName, credential.fullName.familyName].filter(Boolean).join(" ")
+      : undefined;
+    const data = await api<{ token: string; user: User }>("/auth/apple", {
+      method: "POST",
+      auth: false,
+      body: {
+        identity_token: identityToken,
+        name: fullName || null,
+        email: credential.email || null,
+      },
+    });
+    await setToken(data.token);
+    setUser(data.user);
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await api("/auth/logout", { method: "POST" });
@@ -179,7 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [checkExisting]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, loginWithGoogle, logout, refresh }}>
+    <AuthContext.Provider value={{ user, loading, login, register, loginWithGoogle, loginWithApple, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   );
