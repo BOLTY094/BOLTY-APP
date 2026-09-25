@@ -18,7 +18,7 @@ import { fontSources, useTheme } from "@/src/theme";
 LogBox.ignoreAllLogs(true);
 
 function RootNavigator() {
-  const { user, loading } = useAuth();
+  const { user, loading, welcomePending } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const { colors } = useTheme();
@@ -31,12 +31,17 @@ function RootNavigator() {
       if (!inAuth) router.replace("/(auth)/login");
       return;
     }
-    if (user.role === "admin") {
-      if (root !== "(admin)" && root !== "admin") router.replace("/(admin)");
-    } else {
-      if (inAuth || root === "(admin)" || root === "admin") router.replace("/(tabs)");
+    // Fresh login: show the animated bolt welcome, which then routes to the home.
+    if (welcomePending) {
+      if (root !== "welcome") router.replace("/welcome");
+      return;
     }
-  }, [user, loading, segments, router]);
+    if (user.role === "admin") {
+      if (root !== "(admin)" && root !== "admin" && root !== "welcome") router.replace("/(admin)");
+    } else {
+      if (inAuth || !root || root === "(admin)" || root === "admin") router.replace("/(tabs)");
+    }
+  }, [user, loading, welcomePending, segments, router]);
 
   if (loading) {
     return (
@@ -47,7 +52,9 @@ function RootNavigator() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }} />
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }}>
+      <Stack.Screen name="welcome" options={{ animation: "fade", gestureEnabled: false }} />
+    </Stack>
   );
 }
 
@@ -56,7 +63,7 @@ export default function RootLayout() {
 
   if (!fontsLoaded && !fontError) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#F9F9F8" }} />
+      <View style={{ flex: 1, backgroundColor: "#FFFFFF" }} />
     );
   }
 

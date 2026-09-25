@@ -5,14 +5,26 @@ import { Lightning } from "phosphor-react-native";
 
 import { useTheme, fonts } from "@/src/theme";
 
-// Full logo (bolt mascot + wordmark + tagline) from the brand asset.
-export function BoltyLogo({ width = 200, height = 180 }: { width?: number; height?: number }) {
+// Full logo (bolt mascot + wordmark + tagline) — transparent PNG cleaned from the brand asset.
+export function BoltyLogo({ width = 200, height = 200 }: { width?: number; height?: number }) {
   return (
     <Image
-      source={require("@/assets/images/bolty-logo.jpg")}
+      source={require("@/assets/images/bolty-logo.png")}
       style={{ width, height }}
       contentFit="contain"
       testID="bolty-logo"
+    />
+  );
+}
+
+// Bolt mascot only (winking smile), used for the welcome animation.
+export function BoltyBolt({ size = 160 }: { size?: number }) {
+  return (
+    <Image
+      source={require("@/assets/images/bolty-bolt.png")}
+      style={{ width: size, height: size * 0.92 }}
+      contentFit="contain"
+      testID="bolty-bolt"
     />
   );
 }

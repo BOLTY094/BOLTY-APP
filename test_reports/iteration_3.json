@@ -1,0 +1,37 @@
+{
+  "summary": "New iteration verified. Backend: 25/25 pytest passing (21 existing + 4 new test_market.py). GET /api/market/overview -> 401 without token, 401 with bad bearer, 200 for both customer and admin tokens; response contains updated_at, disclaimer, luce, gas, insights (3 items with title+text), sources (>=1); luce.current=90 (unit €/MWh, household_unit €/kWh) and gas.current=28 (unit €/MWh, household_unit €/Smc); each block has current, unit, previous, delta_month_pct, delta_year_pct, trend, series (12 items each with month + numeric value), household_unit, household_price, note. Frontend (mobile web preview, 390x844): mario@test.it/Test1234 -> welcome-screen shown, welcome-greeting reads 'Ciao, Mario!', auto-navigates to Home (analyze-cta) after ~2.4s. Home card home-market renders with home-market-luce (Luce · PUN 90 €/MWh) and home-market-gas (Gas · PSV 28 €/MWh). Tapping home-market opens /market with header 'Andamento energia e gas', market-current shows 90; switching to market-tab-gas updates market-current to 28; switching back to market-tab-luce restores 90. Chart renders 12 SVG rect bars. Three insights (market-insight-0..2) present. Sources footer with disclaimer ('Valori indicativi...') and 'Fonti:' visible. Browser back returns to Home (analyze-cta visible). Logout via storage-clear + login again re-triggers welcome (as expected). Admin admin@bolty.it/Bolty!Admin2026 -> welcome-screen with greeting 'Ciao, Amministratore!' -> auto-redirects to admin dashboard (body renders 'Dashboard / Pannello amministratore', quick stats, azioni rapide, admin bottom tabs). Deprecated packages detected: none. SafeAreaView issues detected: none. React Native red screens: none. One routing regression found (see backend_issues N/A, frontend_issues below): after a plain page reload of a logged-in customer landing on '/', the RootNavigator in app/_layout.tsx doesn't redirect to /(tabs) because segments[0] is undefined and the customer else-branch only redirects when root is in (auth)/(admin) — the app stays on app/index.tsx Loader forever. Admin reload works fine because the admin branch redirects whenever root!=='(admin)'. Welcome is correctly NOT shown after reload (that part of the acceptance criterion is satisfied), but Home never renders.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "app/_layout.tsx RootNavigator", "issue": "Customer reload at '/' gets stuck on the Loader (app/index.tsx). segments[0] is undefined so the else-branch `if (inAuth || root === '(admin)' || root === 'admin') router.replace('/(tabs)')` never fires. Add a condition to also redirect when root !== '(tabs)' (or when root is undefined and !welcomePending). Admin path is unaffected because its condition already covers the undefined root case.", "testID": "analyze-cta", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_market.py",
+    "/app/backend/tests/test_apple_auth.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix customer reload routing in /app/frontend/app/_layout.tsx: change the customer else-branch to also handle segments[0] === undefined (root of `/`). Suggested minimal fix: `else { if (inAuth || root === '(admin)' || root === 'admin' || !root) router.replace('/(tabs)'); }` — this preserves welcome behavior (welcomePending short-circuits earlier in the effect) and matches how the admin branch already handles the undefined root."
+  ],
+  "critical_code_review_comments": [
+    "/api/market/overview is a pure static response (curated indicative values, no DB), auth-gated via get_current_user — correct.",
+    "welcome.tsx uses TOTAL_MS=2400 with a 300ms fade-out just before router.replace, and calls consumeWelcome() right before navigating, correctly clearing welcomePending so the RootNavigator will route to (tabs) or (admin) based on role.",
+    "auth-context.tsx: welcomePending is set ONLY in onLoggedIn (invoked by login/register/google/apple/session-exchange). Plain reload path calls checkExisting() which sets user without touching welcomePending — this correctly ensures reload does NOT re-show welcome. The bug is not here.",
+    "Home card home-market and MarketStat correctly consume market.luce.current / market.gas.current from /api/market/overview and are pre-fetched at Home to render mini stats.",
+    "market.tsx uses react-query with queryKey ['market'] which is the same key used on Home, so navigation to /market is instant with no refetch flicker. Good."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_market.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "95% (1 routing edge case on reload)"},
+  "seed_data_creation": "No new seed data. test_market.py creates one TEST_-prefixed customer via /api/auth/register per module (existing convention).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend regression is fully covered by /app/backend/tests (pytest, 25 tests, ~10s). Run: EXPO_PUBLIC_BACKEND_URL=<preview> MONGO_URL=mongodb://localhost:27017 DB_NAME=test_database pytest backend/tests -v. For the market screen UI, use testIDs: home-market, home-market-luce, home-market-gas on Home; market-current, market-tab-luce, market-tab-gas, market-insight-0..2 on /market. Welcome uses testIDs welcome-screen + welcome-greeting and auto-dismisses in ~2.4s. To trigger the welcome flow, clear localStorage first (the auth token is persisted there on web); a plain page reload should skip welcome (that part is correct). The customer reload-at-'/' loader bug is the one open item.",
+  "rca_of_issue": "RCA of the customer reload bug: In /app/frontend/app/_layout.tsx RootNavigator effect, after a logged-in customer reloads the page, expo-router lands the app on `/` where useSegments() returns [] and segments[0] is undefined. The redirect logic short-circuits early when welcomePending, otherwise goes to the role branches. The admin branch is `if (root !== '(admin)' && root !== 'admin' && root !== 'welcome') router.replace('/(admin)')` which matches root===undefined and redirects. The customer branch is `else { if (inAuth || root === '(admin)' || root === 'admin') router.replace('/(tabs)'); }` which does NOT match root===undefined, so no redirect fires and the app is stuck on app/index.tsx Loader. Reproduction: login as mario@test.it/Test1234, wait for Home, then reload the page — observed URL stays at `/` and the spinner never resolves. Mitigation: add `|| !root` (or `|| root !== '(tabs)'`) to the customer else-branch condition. Admin flow, first-time login welcome flow, and market screen are all unaffected."
+}

@@ -20,6 +20,8 @@ export type User = {
 type AuthContextType = {
   user: User | null;
   loading: boolean;
+  welcomePending: boolean;
+  consumeWelcome: () => void;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string, referralCode?: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
@@ -51,6 +53,14 @@ async function exchangeSession(sessionId: string): Promise<User> {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  // True right after an explicit login/registration: triggers the animated welcome screen.
+  const [welcomePending, setWelcomePending] = useState(false);
+
+  const onLoggedIn = useCallback((u: User) => {
+    setWelcomePending(true);
+    setUser(u);
+  }, []);
+  const consumeWelcome = useCallback(() => setWelcomePending(false), []);
 
   const checkExisting = useCallback(async () => {
     try {
@@ -77,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (sid && !sentSessionIds.has(sid)) {
             sentSessionIds.add(sid);
             const u = await exchangeSession(sid);
-            setUser(u);
+            onLoggedIn(u);
             try {
               const clean = window.location.origin + window.location.pathname;
               window.history.replaceState(window.history.state, "", clean);
@@ -91,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       }
     })();
-  }, [checkExisting]);
+  }, [checkExisting, onLoggedIn]);
 
   // Mobile: cold-start + hot deep links
   useEffect(() => {
@@ -102,14 +112,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         sentSessionIds.add(sid);
         try {
           const u = await exchangeSession(sid);
-          setUser(u);
+          onLoggedIn(u);
         } catch {}
       }
     };
     Linking.getInitialURL().then(handle);
     const sub = Linking.addEventListener("url", (e) => handle(e.url));
     return () => sub.remove();
-  }, []);
+  }, [onLoggedIn]);
 
   const login = useCallback(async (email: string, password: string) => {
     const data = await api<{ token: string; user: User }>("/auth/login", {
@@ -118,8 +128,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       body: { email, password },
     });
     await setToken(data.token);
-    setUser(data.user);
-  }, []);
+    onLoggedIn(data.user);
+  }, [onLoggedIn]);
 
   const register = useCallback(async (name: string, email: string, password: string, referralCode?: string) => {
     const data = await api<{ token: string; user: User }>("/auth/register", {
@@ -128,8 +138,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       body: { name, email, password, referral_code: referralCode || null },
     });
     await setToken(data.token);
-    setUser(data.user);
-  }, []);
+    onLoggedIn(data.user);
+  }, [onLoggedIn]);
 
   const loginWithGoogle = useCallback(async () => {
     const redirectUrl =
@@ -159,14 +169,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (sid && !sentSessionIds.has(sid)) {
         sentSessionIds.add(sid);
         const u = await exchangeSession(sid);
-        setUser(u);
+        onLoggedIn(u);
       } else if (!sid) {
         throw new Error("Accesso Google annullato");
       }
     } finally {
       sub.remove();
     }
-  }, []);
+  }, [onLoggedIn]);
 
   const loginWithApple = useCallback(async () => {
     const credential = await AppleAuthentication.signInAsync({
@@ -190,14 +200,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
     });
     await setToken(data.token);
-    setUser(data.user);
-  }, []);
+    onLoggedIn(data.user);
+  }, [onLoggedIn]);
 
   const logout = useCallback(async () => {
     try {
       await api("/auth/logout", { method: "POST" });
     } catch {}
     await clearToken();
+    setWelcomePending(false);
     setUser(null);
   }, []);
 
@@ -206,7 +217,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [checkExisting]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, loginWithGoogle, loginWithApple, logout, refresh }}>
+    <AuthContext.Provider value={{ user, loading, welcomePending, consumeWelcome, login, register, loginWithGoogle, loginWithApple, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   );

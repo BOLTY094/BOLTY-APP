@@ -45,3 +45,11 @@ Piattaforma mobile dove il cliente carica la bolletta (luce/gas/telefonia), rice
 ## Next Tasks
 - Valutare integrazione AI per estrazione automatica dei dati bolletta.
 - Aggiungere gestione offerte multiple per bolletta e cronologia proposte.
+
+## Iterazione 3 — Restyling bianco, Welcome animato, Andamento mercato (Giu 2026)
+- Tema: sfondo puro bianco (#FFFFFF), bordi/divider grigio-azzurro chiaro; logo convertito in PNG con sfondo trasparente (`assets/images/bolty-logo.png`) + ritaglio mascotte (`bolty-bolt.png`).
+- Welcome animato (`app/welcome.tsx`): mostrato SOLO dopo login/registrazione (flag `welcomePending` in auth-context), bolt con bounce/wiggle + alone pulsante, poi redirect automatico a Home (cliente `/(tabs)`, admin `/(admin)`) dopo ~2.4s.
+- Home: hero brand navy/giallo con mascotte (rimossa foto stock); nuova card "Andamento energia e gas" (`home-market`) con mini-stat PUN/PSV → schermata `app/market.tsx` (tab Luce/Gas, grafico a barre 12 mesi SVG, delta mese/anno, "Per la tua casa", 3 consigli, fonti).
+- Backend: `GET /api/market/overview` (auth) — dati curati indicativi (PUN/PSV medie mensili Giu25→Mag26). Scelta utente: dati indicativi, non feed live.
+- Fix: redirect cliente da `/` (segments vuoto) → `/(tabs)` in `_layout.tsx`.
+- Test: iteration_3 — 25/25 pytest (4 nuovi in `tests/test_market.py`), flussi frontend verificati.

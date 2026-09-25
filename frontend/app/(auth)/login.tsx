@@ -74,7 +74,7 @@ export default function Login() {
       bottomOffset={20}
     >
       <View style={s.logoWrap}>
-        <BoltyLogo width={220} height={190} />
+        <BoltyLogo width={220} height={220} />
       </View>
 
       <H1 style={{ marginBottom: spacing.lg }}>Accedi</H1>

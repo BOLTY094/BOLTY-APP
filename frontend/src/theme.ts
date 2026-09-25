@@ -7,11 +7,12 @@ import { Appearance, StyleSheet, useColorScheme } from "react-native";
 export type ColorScheme = "light" | "dark";
 
 const light = {
-  surface: "#F6F5EF",
+  // Pure white canvas, matching the brand logo background
+  surface: "#FFFFFF",
   onSurface: "#16213E",
   surfaceSecondary: "#FFFFFF",
   onSurfaceSecondary: "#16213E",
-  surfaceTertiary: "#F0EFE8",
+  surfaceTertiary: "#F4F5F9",
   onSurfaceTertiary: "#4A5169",
   surfaceInverse: "#16213E",
   onSurfaceInverse: "#FFFFFF",
@@ -40,9 +41,9 @@ const light = {
   info: "#E3E6F0",
   onInfo: "#16213E",
 
-  border: "#E6E5DE",
-  borderStrong: "#CFCEC5",
-  divider: "#E6E5DE",
+  border: "#E9EBF1",
+  borderStrong: "#D3D7E2",
+  divider: "#EEF0F5",
 
   // Category accents (Luce = brand yellow, Gas = terracotta, Telefonia = teal)
   luce: "#E5A11B",

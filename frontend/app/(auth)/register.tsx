@@ -50,7 +50,7 @@ export default function Register() {
       bottomOffset={20}
     >
       <View style={s.logoWrap}>
-        <BoltyLogo width={150} height={120} />
+        <BoltyLogo width={150} height={150} />
       </View>
 
       <H1 style={{ marginBottom: spacing.xs }}>Crea il tuo account</H1>
