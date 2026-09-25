@@ -1,0 +1,42 @@
+{
+  "summary": "Backend: 8/8 pytest passing covering auth, upload, bills CRUD (incl. soft delete), admin dashboard/queue/offer, customer offers, contract creation + duplicate guard, admin contracts + status update, notifications, and authz negatives (401/403). Frontend (Expo web preview): login/register/logout, admin login → dashboard with live stats, customer home → 'Analizza la mia bolletta' → upload PDF via file chooser → bill detail with analisi, admin queue → propose offer, customer offers tab → offer detail with 'Voglio questa offerta'. Critical routing bug found and fixed in _layout.tsx: the admin gate redirected any `/admin/...` route (e.g. `/admin/bill/[id]`) back to (admin) tabs because it only compared against the URL-less group segment '(admin)'. After the fix admins can open `admin/bill/[id]` and submit offers end-to-end. Contract multi-step form UI was reached from the offer page ('want-offer' testID present) but full 3-step submission was not exercised end-to-end via UI due to time budget; backend contract POST is fully covered by pytest and the offer→contract API flow works. No React Native red screens, no deprecated packages detected (uses expo-image-picker, expo-document-picker, react-native-keyboard-controller, phosphor-react-native).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Admin -> Bill detail navigation",
+        "issue": "Root auth gate in app/_layout.tsx compared segments[0] only against '(admin)' (group), but /admin/bill/[id] is a real segment 'admin'. Admins were bounced back to /(admin). Fixed by also allowing root === 'admin'. Verified: admin can now open admin/bill/[id] and submit offer.",
+        "affected_testIDs": ["queue-bill-<id>", "offer-provider", "offer-submit"]
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Consider consolidating admin routes: move admin/bill/[id].tsx into (admin)/bill/[id].tsx OR keep current fix in _layout.tsx (both admin/bill and (admin) allowed).",
+    "Add explicit UI e2e coverage for the 3-step contract form (dati cliente -> condizioni + firma -> conferma) with testIDs contract-nome/cognome/cf/telefono/email/indirizzo/next, contract-accept-terms, contract-signature, contract-submit (if not already present) so this flow can be automation-verified.",
+    "Optional: guard /admin/* segments to require role==='admin' explicitly to avoid customers reaching admin URLs by direct navigation (currently they are redirected to /(tabs) via the same gate)."
+  ],
+  "critical_code_review_comments": [
+    "server.py uses os.environ[...] hard-fail for required vars (good).",
+    "Bills GET routes properly exclude _id via projection {'_id':0}.",
+    "Contract creation prevents duplicates (existing offer_id -> 400 'Offerta già accettata').",
+    "Admin dashboard aggregates counts with 7d filter for 'nuove_bollette' — verified live.",
+    "Notification body derives from HTML with a regex strip; acceptable for MVP."
+  ],
+  "updated_files": [
+    "/app/frontend/app/_layout.tsx",
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "~85%"},
+  "seed_data_creation": "Created ~5 test customer accounts (email prefix TEST_/test_) and several bills/offers/contracts during automation. Admin seeded automatically at startup.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend fully green via pytest. Frontend routing bug fixed. Remaining validation: 3-step contract form UI submission and admin contracts status update (concluso/annullato) reflected in customer offer detail timeline. Use file chooser for upload: page.expect_file_chooser + set_files. Customer routes: /upload, /bill/[id], /offer/[id], /contract/[id]. Admin routes: /(admin) tabs plus /admin/bill/[id]. Auth gate now accepts both 'admin' and '(admin)' root segments.",
+  "rca_of_issue": "app/_layout.tsx RootNavigator effect used segments[0] to enforce role-based redirection but compared it only to the Expo Router group identifier '(admin)'. Group segments are stripped from URLs, so an authenticated admin visiting /admin/bill/<id> has segments[0]==='admin', which failed the check and triggered router.replace('/(admin)'). Fix: allow both 'admin' and '(admin)' root segments for admins; also block customers from either."
+}

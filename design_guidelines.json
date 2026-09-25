@@ -1,0 +1,192 @@
+{
+  "app_name": "BOLTY",
+  "personality": "1 iOS-Native Clean",
+  "personality_one_liner": "A guided, high-trust experience that turns complex utility bills into clear, actionable savings through clean typography and iOS-native simplicity.",
+  "color": {
+    "surface": "#F9F9F8",
+    "onSurface": "#1C1C1E",
+    "surfaceSecondary": "#FFFFFF",
+    "onSurfaceSecondary": "#1C1C1E",
+    "surfaceTertiary": "#F2F2F2",
+    "onSurfaceTertiary": "#3A3A3C",
+    "surfaceInverse": "#1C1C1E",
+    "onSurfaceInverse": "#FFFFFF",
+    "brand": "#2D4A3E",
+    "onBrand": "#FFFFFF",
+    "brandPrimary": "#2D4A3E",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#E8EFEA",
+    "onBrandSecondary": "#2D4A3E",
+    "brandTertiary": "#F4F7F5",
+    "onBrandTertiary": "#1A2F25",
+    "success": "#34C759",
+    "onSuccess": "#FFFFFF",
+    "warning": "#FF9F0A",
+    "onWarning": "#FFFFFF",
+    "error": "#FF3B30",
+    "onError": "#FFFFFF",
+    "info": "#E8EFEA",
+    "onInfo": "#2D4A3E",
+    "border": "#E5E5EA",
+    "borderStrong": "#C7C7CC",
+    "divider": "#E5E5EA",
+    "muted": "#8E8E93"
+  },
+  "typography": {
+    "displayFontFamily": "PlusJakartaSans_500Medium",
+    "textFontFamily": "PlusJakartaSans_400Regular",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous vertical breathing room. Use 'md' or 'lg' padding inside cards. Avoid dense dashboard-style layouts.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "1",
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": "true",
+    "do's": [
+      "Bottom tab bar",
+      "Sticky headers over scrolling content",
+      "Featured savings cards over hero imagery",
+      "Floating action buttons"
+    ],
+    "dont's": [
+      "Form fields",
+      "Body text regions",
+      "List rows",
+      "Every button"
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Home",
+      "purpose": "A guided entry point featuring a large hero CTA to scan a bill and category selectors.",
+      "states": {
+        "loading": "Skeleton cards for categories.",
+        "empty": "Default state shows 'Carica la tua bolletta e scopri se puoi spendere meno'.",
+        "error": "Error banner under header if network fails."
+      },
+      "layout": "F-shaped scanning. Hero card with glassmorphism overlay containing 'Analizza la mia bolletta' CTA. Below: horizontal scroll or grid for Luce, Gas, Telefonia. Bottom: recent activity or tips."
+    },
+    {
+      "name": "Upload & Extract",
+      "purpose": "Camera/PDF upload flow followed by a skeleton/loading extraction screen showing parsed data.",
+      "states": {
+        "loading": "Animated scanning overlay on the document.",
+        "empty": "Prompt to select Camera or PDF.",
+        "error": "Message: 'Impossible leggere il documento, riprova'."
+      },
+      "layout": "Full screen camera/upload modal. Once uploaded, a structured list card displaying Fornitore, Consumi, Prezzo, etc. Sticky 'Conferma' CTA at bottom."
+    },
+    {
+      "name": "Analysis & Compare",
+      "purpose": "Shows current spend vs proposed offer and calculates annual savings.",
+      "states": {
+        "loading": "Skeleton comparison cards.",
+        "empty": "N/A - guided flow.",
+        "error": "Retry analysis button."
+      },
+      "layout": "Top: Current situation summary (Spesa attuale). Middle: Our Proposal (La nostra proposta) as a featured card with a soft gradient background. Highlight 'Risparmio stimato Z euro l'anno' in success color. Sticky primary CTA 'Voglio questa offerta'."
+    },
+    {
+      "name": "Contract & Sign",
+      "purpose": "Collect user data, review contract, and capture digital signature.",
+      "states": {
+        "loading": "Spinner during submission.",
+        "empty": "N/A",
+        "error": "Validation errors on inputs."
+      },
+      "layout": "Multi-step form. Single column inputs with labels above. Progress bar at top. PDF viewer for contract. Digital signature pad. Sticky submit button in KeyboardAvoidingView."
+    },
+    {
+      "name": "Customer Area",
+      "purpose": "Dashboard for users to track supplies, past bills, and offer statuses.",
+      "states": {
+        "loading": "Skeleton rows.",
+        "empty": "Illustration with 'Non hai ancora contratti attivi'.",
+        "error": "Failed to load dashboard data."
+      },
+      "layout": "Bottom tabs: 'Le mie forniture', 'Le mie bollette', 'Le mie offerte'. Clean lists with status badges (e.g. In lavorazione, Accettata) in brandTertiary with onBrandTertiary text. Minimum 56pt tappable rows."
+    },
+    {
+      "name": "Admin Dashboard",
+      "purpose": "Admin view to manage queues, proposals, and view statistics.",
+      "states": {
+        "loading": "Skeleton metric tiles.",
+        "empty": "N/A",
+        "error": "Failed to load stats."
+      },
+      "layout": "Top: 2-column grid of stat tiles (Bollette analizzate, Valore generato). Middle: Queue of 'Da analizzare'. Bottom: Recent contracts. High information density but clear iOS spacing."
+    }
+  ],
+  "images": {
+    "hero_background": {
+      "url": "https://images.unsplash.com/photo-1635776062043-223faf322554?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTZ8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMHNvZnQlMjB3YXJtJTIwbGlnaHQlMjBncmFkaWVudCUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzkwMzY5MDE2fDA&ixlib=rb-4.1.0&q=85",
+      "dark": "https://images.unsplash.com/photo-1532190872407-280735d27e08?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1OTN8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGRhcmslMjBlbGVnYW50JTIwZ2VvbWV0cmljJTIwYmFja2dyb3VuZHxlbnwwfHx8fDE3OTAzNjkwMjJ8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Soft abstract warm gradient background"
+    },
+    "empty_folder": {
+      "url": "https://images.unsplash.com/photo-1645097114684-28afb6d41c8d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2OTV8MHwxfHNlYXJjaHwxfHxlbXB0eSUyMGZvbGRlciUyMHBhcGVyJTIwbWluaW1hbCUyMDNkfGVufDB8fHx8MTc5MDM2OTAyMnww&ixlib=rb-4.1.0&q=85",
+      "alt": "Minimal 3D paper fold representing an empty state"
+    },
+    "category_gas_bg": {
+      "url": "https://images.unsplash.com/photo-1671716784499-a3d26826d844?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1ODF8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMHNvZnQlMjB0ZXJyYWNvdHRhJTIwZ3JhZGllbnQlMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc5MDM2OTAxNnww&ixlib=rb-4.1.0&q=85",
+      "alt": "Soft terracotta gradient"
+    },
+    "category_telefonia_bg": {
+      "url": "https://images.unsplash.com/photo-1649861742672-20152f77c1f5?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NjZ8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMHNvZnQlMjBtaW50JTIwZ3JlZW4lMjBncmFkaWVudCUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzkwMzY5MDE3fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Soft mint green gradient"
+    }
+  },
+  "haptics": {
+    "events": {
+      "button_press": "impactLight",
+      "tab_change": "selection",
+      "upload_success": "notificationSuccess",
+      "offer_accepted": "notificationSuccess",
+      "error": "notificationError"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Adhere strictly to the iOS-Native Clean personality. Keep layouts spacious and clean with clear visual hierarchy. Use generous padding (md/lg) in cards.",
+    "Do NOT use any blue colors. Use the defined brand Moss Green and accents like Terracotta, Ochre, and Sage. The theme should exude trust and savings.",
+    "Always apply a vertical gradient scrim (transparent to surfaceInverse) behind text when overlaying over images (e.g., hero background) to ensure contrast.",
+    "Implement glassmorphism for sticky headers and the bottom tab bar, ensuring readability with underlying tinted base.",
+    "Primary CTA buttons must stick to the bottom of the screen (inside a KeyboardAvoidingView for forms) to ensure easy thumb reach, regardless of scroll position.",
+    "Ensure max font weight is 500 across all text elements; rely on size (e.g., lg, xl, 2xl) to convey hierarchy instead of heavy bolding.",
+    "For multi-step forms, place labels strictly above inputs, use a single column layout, and never use floating labels.",
+    "In the Customer Area and Admin Dashboard, use minimum 56pt row heights for tappable items with clear leading icons and trailing chevrons where appropriate."
+  ]
+}
