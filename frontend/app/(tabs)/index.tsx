@@ -129,8 +129,8 @@ export default function Home() {
             <Gift size={24} color={colors.brand} weight="fill" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={s.referralTitle}>Invita e Guadagna</Text>
-            <Text style={s.referralSub}>Guadagni un premio per ogni amico che attiva un’offerta.</Text>
+            <Text style={s.referralTitle}>Invita un amico</Text>
+            <Text style={s.referralSub}>Regalagli l’esperienza di risparmiare sulle sue fatture.</Text>
           </View>
           <ArrowRight size={20} color={colors.brand} weight="bold" />
         </Pressable>

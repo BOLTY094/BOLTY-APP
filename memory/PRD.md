@@ -71,3 +71,10 @@ Piattaforma mobile dove il cliente carica la bolletta (luce/gas/telefonia), rice
 - Bug fix: crash OfferDetail (`Circle` → `CircleIcon` phosphor 3.x); toast `pointerEvents` in style.
 - Test: iteration_5 (47/47 pytest + UI) e iteration_6 (retest flusso offerta→contratto OK).
 - Da completare dal cliente: email assistenza reale, dati societari nelle pagine legali, credenziali Apple per revoca token (opzionale), test su iPhone reale.
+
+## Iterazione 7-8 — Email admin con bolletta originale allegata + referral senza premi (Set 2026)
+- Su upload: sha256 del file, verifica che la copia in storage sia byte-identica (altrimenti 502), campi `file_size`/`file_sha256`. Email a `ADMIN_NOTIFY_EMAIL` (env, = amministrazioneverbagroup@gmail.com) con il FILE ORIGINALE allegato (base64, nome originale sanificato o `Bolletta_<Fornitore>.<ext>`, max 25 MB) + link sicuro a scadenza (`/api/files/{path}?token=` JWT scope=file, 7 gg). `send_email` supporta `attachments`.
+- Cliente: email "Bolletta ricevuta" senza allegato (privacy); nel dettaglio bolletta pulsante "Apri il file originale".
+- Email service blocca destinatari finti (*@test.it) con 422 — usare delivered@resend.dev nei test.
+- Referral: rimossi "Invita e Guadagna" e €20 ovunque (home, referral, profilo, delete-account, legal, notifiche backend). Nuovo messaggio: "Invita un amico e regalagli l'esperienza di risparmiare sulle sue fatture." `REFERRAL_REWARD` default 0; il record di attivazione resta (conteggio Attivati).
+- Test iteration_7 (61/61) e iteration_8 (77/77 + UI).

@@ -52,7 +52,7 @@ def privacy_html() -> str:
 <tr><td>Dati di accesso</td><td>Password (memorizzata solo in forma cifrata), identificativi Google / Apple (Sign in with Apple, anche con email privata "Hide My Email")</td><td>Forniti da te / dal provider di accesso scelto</td></tr>
 <tr><td>Bollette e documenti</td><td>File PDF o foto delle bollette caricate, dati estratti (fornitore, importi, consumi, POD/PDR, indirizzo di fornitura)</td><td>Caricati da te</td></tr>
 <tr><td>Dati contrattuali</td><td>Codice fiscale, indirizzo, POD/PDR, firma grafometrica facoltativa, offerta accettata</td><td>Forniti da te al momento della richiesta di attivazione</td></tr>
-<tr><td>Dati di utilizzo</td><td>Notifiche in-app, codice invito e premi del programma "Invita e Guadagna", registri tecnici (log) del server</td><td>Generati dall'uso dell'app</td></tr>
+<tr><td>Dati di utilizzo</td><td>Notifiche in-app, codice invito e amici invitati del programma "Invita un amico", registri tecnici (log) del server</td><td>Generati dall'uso dell'app</td></tr>
 </table>
 <p>Non trattiamo categorie particolari di dati (art. 9 GDPR) e non effettuiamo profilazione con effetti giuridici. Non utilizziamo SDK pubblicitari né strumenti di tracciamento cross-app.</p>
 
@@ -63,7 +63,7 @@ def privacy_html() -> str:
 <tr><td>Analisi della bolletta e confronto con le offerte disponibili</td><td>Esecuzione del contratto (art. 6.1.b)</td></tr>
 <tr><td>Gestione della richiesta di attivazione di un'offerta e trasmissione dei dati al fornitore scelto</td><td>Esecuzione del contratto (art. 6.1.b)</td></tr>
 <tr><td>Invio di notifiche e email di servizio (bolletta ricevuta, offerta pronta, stato pratica)</td><td>Esecuzione del contratto (art. 6.1.b)</td></tr>
-<tr><td>Programma "Invita e Guadagna"</td><td>Esecuzione del contratto (art. 6.1.b)</td></tr>
+<tr><td>Programma "Invita un amico"</td><td>Esecuzione del contratto (art. 6.1.b)</td></tr>
 <tr><td>Assistenza clienti</td><td>Esecuzione del contratto / legittimo interesse (art. 6.1.b, 6.1.f)</td></tr>
 <tr><td>Sicurezza, prevenzione abusi, adempimenti fiscali e legali</td><td>Obbligo legale / legittimo interesse (art. 6.1.c, 6.1.f)</td></tr>
 </table>
@@ -123,8 +123,8 @@ def terms_html() -> str:
 <h2>4. Richiesta di attivazione e diritto di ripensamento</h2>
 <p>Inviando una richiesta di attivazione, l'utente autorizza {APP} a trasmettere i propri dati al fornitore scelto per la conclusione del contratto. Ai sensi del Codice del Consumo (D.Lgs. 206/2005) l'utente può esercitare il diritto di ripensamento entro 14 giorni dalla conclusione del contratto di fornitura, senza penali, contattando <a href="mailto:{support_email}">{support_email}</a>.</p>
 
-<h2>5. Programma "Invita e Guadagna"</h2>
-<p>Il premio viene riconosciuto quando l'amico invitato attiva un'offerta tramite {APP}. Sono esclusi auto-inviti, account duplicati e utilizzi fraudolenti. {APP} può modificare o sospendere il programma con preavviso.</p>
+<h2>5. Programma "Invita un amico"</h2>
+<p>Ogni utente dispone di un codice invito con cui può invitare amici a provare {APP} e regalare loro l'esperienza di risparmiare sulle proprie fatture. Il programma non prevede pagamenti né premi in denaro. Sono esclusi auto-inviti, account duplicati e utilizzi fraudolenti. {APP} può modificare o sospendere il programma con preavviso.</p>
 
 <h2>6. Costi</h2>
 <p>L'utilizzo dell'app è gratuito per l'utente. Non sono previsti acquisti in-app.</p>

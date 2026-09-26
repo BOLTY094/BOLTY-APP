@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 8 — validated (A) exact-original PDF preservation & admin email attachment path and (B) money-free 'Invita un amico' referral rename. New pytest module /app/backend/tests/test_bill_upload_integrity.py (16 tests, 1 real upload) plus a stale-referral-reward fix in test_apple_auth.py. Full backend suite now 77/77 green in ~22s. Real Bolletta_Enel_Luce.pdf (99058 B, sha256 63b193dba4ae5caba7f301adb0f3d500b3e3d2a95d4afa018e31f85a9a2ddb19) was uploaded ONCE as mario@test.it: response fields correct (file_name='Bolletta_Enel_Luce.pdf', file_size=99058, file_sha256=63b19…), GET /api/files/{storage_path} with Bearer returned identical bytes with content-type application/pdf, backend log line 'Admin bill email sent … (attachment=yes, 96 KB)' present for the bill_id. server.send_email JSON payload verified in-process by monkey-patching httpx.AsyncClient — payload['attachments'][0] has filename='Bolletta_Enel_Luce.pdf', content_type='application/pdf' and base64(content) decodes to bytes that match the original sha256. attachment_filename tested for: original preserved, fallback 'Bolletta_Edison.pdf' when file_name is None, path traversal '../../x.pdf' → 'x.pdf', backslash traversal, dangerous-char neutralisation, empty→'Bolletta_luce.pdf'. MAX_ATTACHMENT_BYTES == 25 MB confirmed and notify_admin_new_bill on a 25 MB+1 payload sets attachments=None (attach=False) with the 'supera il limite' copy; normal-size path emits exactly one attachment with the original bytes. Legal pages: /api/legal/privacy and /api/legal/terms contain no 'Invita e Guadagna', no '€', no 'premio'; terms section 5 says 'non prevede pagamenti né premi in denaro'. FRONTEND (390x844 web preview, mario@test.it/Test1234): Home referral card testID=home-referral shows 'Invita un amico' + 'Regalagli l’esperienza di risparmiare sulle sue fatture.'; tapping opens /referral with header 'Invita un amico', referral-hero 'Invita un amico' + 'e regalagli l’esperienza di risparmiare sulle sue fatture.', only two stat cards Invitati/Attivati (no Premi, no €), steps 1-3 with no money mention, referral-code E20BE6 and referral-share both visible. Full rendered page text grepped for 'Guadagna', '€ 20', '20 €', 'premio', 'Premi' → NONE. Profilo tab item testID=profile-referral reads 'Invita un amico'. Bill detail screen shows the file button testID=bill-open-file with text 'Apri il file originale · <file_name>' (verified on most-recent bill with file_name 'bolletta_test.pdf' — same UI code path applies to the new Enel PDF).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_bill_upload_integrity.py",
+    "/app/backend/tests/test_apple_auth.py",
+    "/app/backend/tests/test_admin_notify_and_file_token.py",
+    "/app/backend/tests/test_deletion_legal_support.py",
+    "/app/backend/tests/test_market.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/bill_upload_integrity.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:406-428 send_email correctly base64-encodes attachment bytes and puts them under payload['attachments'] as [{filename, content, content_type}] — verified live by capturing the httpx JSON payload.",
+    "server.py:744-796 /api/upload computes sha256, stores, RE-READS the stored object and fails with 502 if the sha256 differs — integrity check confirmed on the real 99058-byte Enel PDF (sha256 matches through upload → storage → retrieval).",
+    "server.py:802-810 attachment_filename basenames the file_name and strips dangerous chars with a whitelist regex — path traversal safe; fallback 'Bolletta_<Fornitore>.<ext>' works when file_name missing.",
+    "server.py:799 MAX_ATTACHMENT_BYTES = 25 MB with graceful attach=False path (no crash for oversized files) — verified via monkey-patched send_email.",
+    "server.py:65 REFERRAL_REWARD defaults to 0 (no cash reward); server.py:989-998 still creates the reward record (amount=0) and sends the new notification 'Il tuo amico ha attivato un’offerta!' — matches the copy in the review request.",
+    "backend/legal.py:126-127 terms §5 rewritten to 'Il programma non prevede pagamenti né premi in denaro'; privacy still references the program name 'Invita un amico' only — no forbidden strings anywhere in /api/legal/*."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_bill_upload_integrity.py (new — 16 focused tests, 1 real upload)",
+    "/app/backend/tests/test_apple_auth.py (fixed stale +€20 reward assertion → now asserts activated_count +1, rewards_total unchanged, amount=0, reward_per_friend=0, new notification title present)"
+  ],
+  "success_rate": {"backend": "100% (77/77)", "frontend": "100% (home referral card, /referral hero+code+share, Profilo referral row, bill-open-file all verified; no forbidden strings)"},
+  "seed_data_creation": "Mario received one additional real bill (Bolletta_Enel_Luce.pdf) — left in DB because it is the fixture bill for the review request's frontend check. Two TEST_-prefixed customers were created transiently by the referral & authz suites (they clean themselves up).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Real admin emails hit amministrazioneverbagroup@gmail.com on every successful /api/upload. This iteration triggered ~4 real emails (1 from test_bill_upload_integrity.py + 1 from backend_test.py::TestFlow + 1 from test_admin_notify_and_file_token.py + 1 from test_apple_auth.py::TestCoreFlowRegression). Keep future full-suite runs to at most 1 per iteration, or use `pytest -k 'not TestRealPdfUploadIntegrity and not test_full_flow and not test_admin_email_sent and not TestCoreFlowRegression'` for a no-real-email dry run. All attachment/integrity/legal/referral checks are covered — no need to re-upload to verify the fix."
+}

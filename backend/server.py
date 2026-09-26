@@ -1,4 +1,6 @@
 import os
+import base64
+import hashlib
 import asyncio
 import re
 import uuid
@@ -60,7 +62,7 @@ ADMIN_NAME = os.environ.get("ADMIN_NAME", "Admin")
 # Inbox that receives operational notifications (new bills, support requests). Defaults to the admin login email.
 ADMIN_NOTIFY_EMAIL = os.environ.get("ADMIN_NOTIFY_EMAIL", "").strip() or ADMIN_EMAIL
 
-REFERRAL_REWARD = float(os.environ.get("REFERRAL_REWARD", "20"))
+REFERRAL_REWARD = float(os.environ.get("REFERRAL_REWARD", "0"))  # no cash reward: referral is invite-only
 
 APPLE_AUDIENCES = [a.strip() for a in os.environ.get("APPLE_AUDIENCES", "").split(",") if a.strip()]
 APPLE_ISSUER = "https://appleid.apple.com"
@@ -401,16 +403,22 @@ def _email_template(title: str, message: str) -> str:
     )
 
 
-async def send_email(*, to: str, subject: str, html: str) -> Optional[str]:
+async def send_email(*, to: str, subject: str, html: str, attachments: Optional[list] = None) -> Optional[str]:
+    """attachments: [{"filename": str, "content": bytes, "content_type": str}] — sent as-is (base64), never transformed."""
     if not EMAIL_KEY:
         logger.warning("EMERGENT_EMAIL_KEY missing; skipping email")
         return None
     _assert_safe_email(subject, html)
-    payload = {"to": [to], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
+    payload: dict = {"to": [to], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
     if EMAIL_REPLY_TO:
         payload["contact_email"] = EMAIL_REPLY_TO
+    if attachments:
+        payload["attachments"] = [
+            {"filename": a["filename"], "content": base64.b64encode(a["content"]).decode("ascii"), "content_type": a.get("content_type") or "application/octet-stream"}
+            for a in attachments
+        ]
     try:
-        async with httpx.AsyncClient(timeout=30) as c:
+        async with httpx.AsyncClient(timeout=60) as c:
             resp = await c.post(f"{EMAIL_BASE_URL}/api/v1/email/send",
                                 headers={"X-Email-Key": EMAIL_KEY}, json=payload)
         resp.raise_for_status()
@@ -746,8 +754,13 @@ async def upload_bill(
     ext = (file.filename or "file").split(".")[-1].lower()
     path = f"{APP_NAME}/uploads/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
     content_type = file.content_type or "application/octet-stream"
+    sha256 = hashlib.sha256(content).hexdigest()
     try:
         await run_in_threadpool(put_object, path, content, content_type)
+        # Integrity check: the stored copy must be byte-identical to what the customer uploaded
+        stored, _ = await run_in_threadpool(get_object, path)
+        if hashlib.sha256(stored).hexdigest() != sha256:
+            raise RuntimeError("stored file differs from uploaded file")
     except Exception as e:
         logger.error(f"Upload failed: {e}")
         raise HTTPException(status_code=502, detail="Caricamento file non riuscito")
@@ -763,6 +776,8 @@ async def upload_bill(
         "storage_path": path,
         "file_name": file.filename,
         "file_type": content_type,
+        "file_size": len(content),
+        "file_sha256": sha256,
         "status": "nuova",
         "extracted": extracted,
         "analysis": analysis,
@@ -777,25 +792,55 @@ async def upload_bill(
         "Per la tua privacy il file non viene allegato alle email: lo trovi sempre nella sezione Bollette dell'app.",
         "Bolletta ricevuta — BOLTY",
     )
-    await notify_admin_new_bill(request, bill)
+    await notify_admin_new_bill(request, bill, content)
     return clean(bill)
 
 
-async def notify_admin_new_bill(request: Request, bill: dict) -> None:
-    """Email the administrator about a new bill, with a secure expiring link to open the file."""
+MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024  # email providers cap attachments around 25-40 MB
+
+
+def attachment_filename(bill: dict) -> str:
+    """Original file name (basename, safe chars); falls back to Bolletta_<Fornitore>.<ext>."""
+    original = os.path.basename((bill.get("file_name") or "").replace("\\", "/")).strip()
+    original = re.sub(r"[^\w.\- ()àèéìòù]", "_", original, flags=re.UNICODE)
+    if original and "." in original:
+        return original
+    ext = (bill.get("storage_path") or "").rsplit(".", 1)[-1] or "pdf"
+    fornitore = re.sub(r"[^\w]", "", (bill.get("extracted") or {}).get("fornitore") or bill.get("category") or "Bolletta")
+    return f"Bolletta_{fornitore}.{ext}"
+
+
+async def notify_admin_new_bill(request: Request, bill: dict, content: bytes) -> None:
+    """Email the administration about a new bill with the ORIGINAL uploaded file attached (byte-for-byte),
+    plus a secure expiring link as a backup."""
     try:
         link = f"{public_base_url(request)}/api/files/{bill['storage_path']}?token={create_file_token(bill['storage_path'])}"
         who = escape(bill.get("user_name") or "Cliente")
         mail = escape(bill.get("user_email") or "email non disponibile")
-        fname = escape(bill.get("file_name") or "bolletta")
+        filename = attachment_filename(bill)
+        size_kb = max(1, len(content) // 1024)
+        attach = len(content) <= MAX_ATTACHMENT_BYTES
+        attach_line = (
+            f"<p>In allegato trovi il <strong>file originale</strong> caricato dal cliente: <strong>{escape(filename)}</strong> ({size_kb} KB).</p>"
+            if attach else
+            f"<p>Il file ({size_kb} KB) supera il limite per gli allegati email: aprilo dal link qui sotto.</p>"
+        )
         html = _email_template(
             "Nuova bolletta da analizzare",
             f"<p><strong>{who}</strong> ({mail}) ha caricato una bolletta <strong>{escape(bill['category'])}</strong>.</p>"
-            f"<p>File: <strong>{fname}</strong> · ID: {escape(bill['bill_id'])}</p>"
-            f"<p><a href=\"{link}\" style=\"display:inline-block;background:#16213E;color:#ffffff;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:600\">Apri la bolletta</a></p>"
-            f"<p style=\"font-size:12px;color:#6B7185\">Il link è personale e scade tra {FILE_LINK_DAYS} giorni. Puoi anche aprire la bolletta dall'app Bolty nella coda amministratore.</p>",
+            f"{attach_line}"
+            f"<p>ID bolletta: {escape(bill['bill_id'])} · SHA-256: <code style=\"font-size:11px\">{escape(bill.get('file_sha256') or '')[:16]}…</code></p>"
+            f"<p><a href=\"{link}\" style=\"display:inline-block;background:#16213E;color:#ffffff;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:600\">Apri la bolletta online</a></p>"
+            f"<p style=\"font-size:12px;color:#6B7185\">Il link è personale e scade tra {FILE_LINK_DAYS} giorni. La bolletta è sempre disponibile anche nell'app Bolty (coda amministratore).</p>",
         )
-        await send_email(to=ADMIN_NOTIFY_EMAIL, subject=f"Nuova bolletta {bill['category']} da {bill.get('user_name') or 'cliente'} — BOLTY", html=html)
+        attachments = [{"filename": filename, "content": content, "content_type": bill.get("file_type") or "application/octet-stream"}] if attach else None
+        email_id = await send_email(
+            to=ADMIN_NOTIFY_EMAIL,
+            subject=f"Nuova bolletta {bill['category']} da {bill.get('user_name') or 'cliente'} — BOLTY",
+            html=html,
+            attachments=attachments,
+        )
+        logger.info(f"Admin bill email {'sent ' + email_id if email_id else 'FAILED'} for {bill['bill_id']} (attachment={'yes' if attach else 'no'}, {size_kb} KB)")
     except Exception as e:
         logger.warning(f"Admin bill notification failed: {e}")
 
@@ -947,9 +992,9 @@ async def create_contract(inp: ContractInput, user: dict = Depends(get_current_u
             })
             await db.users.update_one({"user_id": referrer_id}, {"$inc": {"reward_balance": REFERRAL_REWARD}})
             await notify(
-                referrer_id, "Premio invito guadagnato!",
-                f"Un tuo amico ha attivato un'offerta con Bolty. Hai guadagnato <strong>€ {REFERRAL_REWARD:.0f}</strong> in premi! 🎉",
-                "Hai guadagnato un premio — BOLTY",
+                referrer_id, "Il tuo amico ha attivato un'offerta!",
+                f"<strong>{escape(user.get('name') or 'Un tuo amico')}</strong> ha accettato il tuo invito e ha attivato un'offerta con Bolty: ora risparmia anche lui sulle sue fatture. Grazie per averlo invitato! 🎉",
+                "Il tuo amico ha attivato un'offerta — BOLTY",
             )
 
     await notify(

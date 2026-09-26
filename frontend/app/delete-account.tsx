@@ -70,7 +70,7 @@ export default function DeleteAccount() {
           <Row icon={<Files size={18} color={colors.brand} weight="fill" />} text="Tutte le bollette caricate, i file PDF/foto e le analisi" />
           <Row icon={<FileText size={18} color={colors.brand} weight="fill" />} text="Offerte ricevute e richieste di contratto in corso" />
           <Row icon={<Bell size={18} color={colors.brand} weight="fill" />} text="Notifiche e sessioni attive su tutti i dispositivi" />
-          <Row icon={<Gift size={18} color={colors.brand} weight="fill" />} text="Codice invito, inviti e premi non ancora riscattati" last={!isApple} />
+          <Row icon={<Gift size={18} color={colors.brand} weight="fill" />} text="Codice invito e amici invitati" last={!isApple} />
           {isApple ? <Row icon={<AppleLogo size={18} color={colors.brand} weight="fill" />} text="Il collegamento con il tuo Apple ID (Sign in with Apple) viene revocato" last /> : null}
         </View>
 

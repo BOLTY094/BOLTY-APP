@@ -2,12 +2,12 @@ import React from "react";
 import { View, Text, ScrollView, Share } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
-import { Gift, ShareNetwork, UserPlus, CheckCircle, Coins } from "phosphor-react-native";
+import { Gift, ShareNetwork, UserPlus, CheckCircle } from "phosphor-react-native";
 
 import { api } from "@/src/api";
 import { useToast } from "@/src/toast";
 import { ScreenHeader } from "@/src/components/screen-header";
-import { H2, Body, Muted, Button, Loader, eur } from "@/src/components/ui";
+import { H2, Body, Muted, Button, Loader } from "@/src/components/ui";
 import { makeStyles, useTheme, spacing, radius, fonts, fontSize } from "@/src/theme";
 
 export default function Referral() {
@@ -31,7 +31,7 @@ export default function Referral() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <ScreenHeader title="Invita e Guadagna" />
+      <ScreenHeader title="Invita un amico" />
       {isLoading || !data ? (
         <Loader />
       ) : (
@@ -41,8 +41,8 @@ export default function Referral() {
             <View style={s.giftIcon}>
               <Gift size={30} color={colors.brand} weight="fill" />
             </View>
-            <Text style={s.heroTitle}>Guadagna € {Number(data.reward_per_friend).toFixed(0)}</Text>
-            <Text style={s.heroSub}>per ogni amico che attiva un’offerta con Bolty</Text>
+            <Text style={s.heroTitle} testID="referral-hero">Invita un amico</Text>
+            <Text style={s.heroSub}>e regalagli l’esperienza di risparmiare sulle sue fatture.</Text>
           </View>
 
           {/* Code */}
@@ -70,35 +70,29 @@ export default function Referral() {
               <Text style={s.statValue}>{data.activated_count}</Text>
               <Muted>Attivati</Muted>
             </View>
-            <View style={s.stat}>
-              <Coins size={22} color={colors.luce} weight="fill" />
-              <Text style={s.statValue}>{eur(data.rewards_total)}</Text>
-              <Muted>Premi</Muted>
-            </View>
           </View>
 
           {/* How it works */}
           <H2 style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>Come funziona</H2>
           <Step n={1} title="Condividi il codice" text="Invia il tuo codice invito ad amici e parenti." />
           <Step n={2} title="Il tuo amico si registra" text="Inserisce il codice al momento della registrazione." />
-          <Step n={3} title="Guadagni un premio" text={`Quando attiva un'offerta, ricevi € ${Number(data.reward_per_friend).toFixed(0)} in premi.`} />
+          <Step n={3} title="Il tuo amico risparmia" text="Un consulente analizza la sua bolletta e gli propone un’offerta più conveniente." />
 
           {/* Rewards list */}
           {data.rewards?.length > 0 ? (
             <>
-              <H2 style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>I tuoi premi</H2>
+              <H2 style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>Amici che hanno attivato un’offerta</H2>
               {data.rewards.map((r: any) => {
                 const date = new Date(r.created_at).toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "numeric" });
                 return (
                   <View key={r.reward_id} style={s.rewardRow} testID={`reward-${r.reward_id}`}>
                     <View style={s.rewardIcon}>
-                      <Gift size={18} color={colors.success} weight="fill" />
+                      <CheckCircle size={18} color={colors.success} weight="fill" />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Body style={{ fontFamily: fonts.medium, color: colors.onSurface }}>{r.referred_name || "Un amico"}</Body>
                       <Muted>{date}</Muted>
                     </View>
-                    <Text style={s.rewardAmount}>+ {eur(r.amount)}</Text>
                   </View>
                 );
               })}
@@ -141,5 +135,4 @@ const useStyles = makeStyles((colors) => ({
   stepTitle: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.onSurface },
   rewardRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border },
   rewardIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },
-  rewardAmount: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.success },
 }));

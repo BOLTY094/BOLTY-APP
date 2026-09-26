@@ -225,7 +225,16 @@ class TestCoreFlowRegression:
         r = http.post(f"{API}/contracts", headers=_hdr(friend_token), json=contract_payload, timeout=30)
         assert r.status_code == 200, r.text
 
-        # 5) Mario referral counters must increase
+        # 5) Mario referral counters must increase (Jan 2026: no cash reward, amount=0)
         ref_after = http.get(f"{API}/referral", headers=_hdr(mario_token), timeout=30).json()
         assert ref_after["activated_count"] == before_activated + 1
-        assert ref_after["rewards_total"] == pytest.approx(before_total + 20.0, rel=0, abs=0.01)
+        # rewards_total stays flat because REFERRAL_REWARD defaults to 0
+        assert ref_after["rewards_total"] == pytest.approx(before_total, rel=0, abs=0.01)
+        assert ref_after["reward_per_friend"] == 0
+        # last reward record must exist with amount 0 and reference the friend
+        latest = ref_after["rewards"][0]
+        assert latest["amount"] == 0
+        assert latest["referred_user_id"]
+        # Notification title/text updated (no money promised)
+        notifs = http.get(f"{API}/notifications", headers=_hdr(mario_token), timeout=30).json()
+        assert any(n.get("title") == "Il tuo amico ha attivato un'offerta!" for n in notifs)
