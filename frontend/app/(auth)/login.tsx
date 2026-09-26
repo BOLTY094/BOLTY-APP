@@ -7,6 +7,7 @@ import * as AppleAuthentication from "expo-apple-authentication";
 import { GoogleLogo } from "phosphor-react-native";
 
 import { useAuth } from "@/src/auth-context";
+import { openLegal } from "@/src/legal";
 import { useToast } from "@/src/toast";
 import { BoltyLogo } from "@/src/components/logo";
 import { Button, TextField, H1, Muted } from "@/src/components/ui";
@@ -130,6 +131,13 @@ export default function Login() {
           Non hai un account? <Text style={s.footerLink}>Registrati</Text>
         </Text>
       </Pressable>
+      <Text style={s.legal} testID="login-legal">
+        <Text style={s.footerLink} onPress={() => openLegal("privacy").catch(() => {})}>Privacy Policy</Text>
+        {"  ·  "}
+        <Text style={s.footerLink} onPress={() => openLegal("terms").catch(() => {})}>Termini</Text>
+        {"  ·  "}
+        <Text style={s.footerLink} onPress={() => openLegal("support").catch(() => {})}>Assistenza</Text>
+      </Text>
     </KeyboardAwareScrollView>
   );
 }
@@ -151,6 +159,7 @@ const useStyles = makeStyles((colors) => ({
   line: { flex: 1, height: 1, backgroundColor: colors.divider },
   appleBtn: { height: 54, marginTop: spacing.md },
   footer: { alignItems: "center", marginTop: spacing.xl },
+  legal: { textAlign: "center", marginTop: spacing.lg, fontFamily: fonts.regular, fontSize: fontSize.sm, color: colors.muted },
   footerText: { color: colors.muted, fontFamily: fonts.regular, fontSize: fontSize.base },
   footerLink: { color: colors.brandPrimary, fontFamily: fonts.semibold },
 }));

@@ -1,7 +1,7 @@
 import React from "react";
 import { Platform } from "react-native";
 import { Tabs } from "expo-router";
-import { House, Lightning, Receipt, Tag } from "phosphor-react-native";
+import { House, Lightning, Receipt, Tag, UserCircle } from "phosphor-react-native";
 
 import { useTheme, fonts } from "@/src/theme";
 import { usesNativeTabs } from "@/src/navigation";
@@ -28,6 +28,10 @@ export default function TabsLayout() {
         <NativeTabs.Trigger name="offerte">
           <NativeTabs.Trigger.Icon sf="tag.fill" />
           <NativeTabs.Trigger.Label>Offerte</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="profilo">
+          <NativeTabs.Trigger.Icon sf="person.crop.circle.fill" />
+          <NativeTabs.Trigger.Label>Profilo</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
       </NativeTabs>
     );
@@ -63,6 +67,10 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="offerte"
         options={{ title: "Offerte", tabBarIcon: ({ color, focused }) => <Tag size={24} color={color} weight={focused ? "fill" : "regular"} /> }}
+      />
+      <Tabs.Screen
+        name="profilo"
+        options={{ title: "Profilo", tabBarIcon: ({ color, focused }) => <UserCircle size={24} color={color} weight={focused ? "fill" : "regular"} /> }}
       />
     </Tabs>
   );

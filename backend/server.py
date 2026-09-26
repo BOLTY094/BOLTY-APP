@@ -15,7 +15,7 @@ import requests
 from bson import ObjectId
 from dotenv import load_dotenv
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFile, File, Form, Query
-from fastapi.responses import Response
+from fastapi.responses import Response, HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -25,6 +25,7 @@ from html.parser import HTMLParser
 from urllib.parse import urlparse
 
 import market
+import legal
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -62,6 +63,13 @@ REFERRAL_REWARD = float(os.environ.get("REFERRAL_REWARD", "20"))
 APPLE_AUDIENCES = [a.strip() for a in os.environ.get("APPLE_AUDIENCES", "").split(",") if a.strip()]
 APPLE_ISSUER = "https://appleid.apple.com"
 _apple_jwk_client = None
+# Optional: needed only to revoke Apple tokens on account deletion (Apple REST API).
+APPLE_TEAM_ID = os.environ.get("APPLE_TEAM_ID", "").strip()
+APPLE_KEY_ID = os.environ.get("APPLE_KEY_ID", "").strip()
+APPLE_PRIVATE_KEY = os.environ.get("APPLE_PRIVATE_KEY", "").replace("\\n", "\n").strip()
+APPLE_REVOKE_ENABLED = bool(APPLE_TEAM_ID and APPLE_KEY_ID and APPLE_PRIVATE_KEY and APPLE_AUDIENCES)
+
+SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "").strip() or ADMIN_EMAIL
 
 
 def apple_jwk_client():
@@ -77,6 +85,59 @@ api_router = APIRouter(prefix="/api")
 # ---------------------------------------------------------------------------
 # Mongo helpers
 # ---------------------------------------------------------------------------
+def apple_client_secret() -> str:
+    """Client secret JWT (ES256) for Apple's /auth/token and /auth/revoke endpoints."""
+    now = datetime.now(timezone.utc)
+    return jwt.encode(
+        {"iss": APPLE_TEAM_ID, "iat": int(now.timestamp()), "exp": int((now + timedelta(minutes=10)).timestamp()),
+         "aud": APPLE_ISSUER, "sub": APPLE_AUDIENCES[0]},
+        APPLE_PRIVATE_KEY, algorithm="ES256", headers={"kid": APPLE_KEY_ID},
+    )
+
+
+async def apple_exchange_code(code: str) -> Optional[str]:
+    """Exchange the authorizationCode for a refresh token (stored to allow revocation on deletion)."""
+    if not APPLE_REVOKE_ENABLED:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=20) as c:
+            r = await c.post(f"{APPLE_ISSUER}/auth/token", data={
+                "client_id": APPLE_AUDIENCES[0], "client_secret": apple_client_secret(),
+                "code": code, "grant_type": "authorization_code",
+            })
+        if r.status_code == 200:
+            return r.json().get("refresh_token")
+        logger.warning(f"Apple code exchange failed: {r.status_code} {r.text[:200]}")
+    except Exception as e:
+        logger.warning(f"Apple code exchange error: {e}")
+    return None
+
+
+async def apple_revoke(refresh_token: str) -> bool:
+    if not APPLE_REVOKE_ENABLED or not refresh_token:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=20) as c:
+            r = await c.post(f"{APPLE_ISSUER}/auth/revoke", data={
+                "client_id": APPLE_AUDIENCES[0], "client_secret": apple_client_secret(),
+                "token": refresh_token, "token_type_hint": "refresh_token",
+            })
+        return r.status_code == 200
+    except Exception as e:
+        logger.warning(f"Apple revoke error: {e}")
+        return False
+
+
+def delete_object(path: str) -> None:
+    """Erase a stored file. The object store has no DELETE API, so we overwrite the
+    object with 0 bytes (PUT overwrites silently) — the personal content is gone and the
+    DB record pointing to it is removed by the caller."""
+    try:
+        put_object(path, b"", "application/octet-stream")
+    except Exception as e:
+        logger.warning(f"Storage erase {path} error: {e}")
+
+
 def _validate_object_id(v: Any) -> str:
     if isinstance(v, ObjectId):
         return str(v)
@@ -369,6 +430,7 @@ class AppleInput(BaseModel):
     identity_token: str
     name: Optional[str] = None
     email: Optional[EmailStr] = None
+    authorization_code: Optional[str] = None
 
 
 CATEGORIES = {"luce", "gas", "telefonia"}
@@ -414,6 +476,11 @@ class ContractInput(BaseModel):
     customer_data: CustomerData
     accepted_terms: bool
     signature: Optional[str] = None
+
+
+class SupportInput(BaseModel):
+    subject: str = Field(min_length=3, max_length=120)
+    message: str = Field(min_length=10, max_length=4000)
 
 
 class ContractStatusInput(BaseModel):
@@ -573,6 +640,11 @@ async def apple_auth(inp: AppleInput):
         if email:
             doc["email"] = email
         await db.users.insert_one(doc)
+
+    if inp.authorization_code and APPLE_REVOKE_ENABLED:
+        rt = await apple_exchange_code(inp.authorization_code)
+        if rt:
+            await db.users.update_one({"user_id": user_id}, {"$set": {"apple_refresh_token": rt}})
 
     session_token = f"apple_{uuid.uuid4().hex}"
     await db.user_sessions.insert_one({
@@ -978,6 +1050,101 @@ async def admin_update_contract(contract_id: str, inp: ContractStatusInput, admi
         )
     updated = await db.contracts.find_one({"contract_id": contract_id}, {"_id": 0})
     return updated
+
+
+# ---------------------------------------------------------------------------
+# ACCOUNT DELETION (Apple 5.1.1(v)) — permanently removes the user and personal data
+# ---------------------------------------------------------------------------
+@api_router.delete("/auth/me")
+async def delete_account(user: dict = Depends(get_current_user)):
+    if user.get("role") == "admin":
+        raise HTTPException(status_code=403, detail="L'account amministratore non può essere eliminato dall'app")
+    uid = user["user_id"]
+    full = await db.users.find_one({"user_id": uid}) or {}
+
+    # Files on object storage (best effort, in a thread so we don't block the loop)
+    paths = [b["storage_path"] async for b in db.bills.find({"user_id": uid, "storage_path": {"$ne": None}}, {"storage_path": 1}) if b.get("storage_path")]
+    for pth in paths:
+        await run_in_threadpool(delete_object, pth)
+
+    # Apple: revoke the Sign in with Apple grant when credentials are configured
+    apple_revoked = False
+    if full.get("apple_refresh_token"):
+        apple_revoked = await apple_revoke(full["apple_refresh_token"])
+
+    # Detach referral links pointing to this user, then wipe collections
+    await db.users.update_many({"referred_by": uid}, {"$set": {"referred_by": None}})
+    counts = {}
+    for coll in ("bills", "offers", "contracts", "notifications"):
+        res = await getattr(db, coll).delete_many({"user_id": uid})
+        counts[coll] = res.deleted_count
+    res = await db.rewards.delete_many({"$or": [{"referrer_id": uid}, {"referred_id": uid}]})
+    counts["rewards"] = res.deleted_count
+    res = await db.support_requests.delete_many({"user_id": uid})
+    counts["support_requests"] = res.deleted_count
+    res = await db.user_sessions.delete_many({"user_id": uid})
+    counts["sessions"] = res.deleted_count
+    await db.users.delete_one({"user_id": uid})
+    logger.info(f"Account {uid} deleted: {counts}, files={len(paths)}, apple_revoked={apple_revoked}")
+    return {"ok": True, "deleted": counts, "files_deleted": len(paths), "apple_revoked": apple_revoked}
+
+
+# ---------------------------------------------------------------------------
+# SUPPORT
+# ---------------------------------------------------------------------------
+@api_router.get("/legal/info")
+async def legal_info():
+    return {"support_email": SUPPORT_EMAIL, "privacy_path": "/api/legal/privacy", "terms_path": "/api/legal/terms", "support_path": "/api/legal/support"}
+
+
+@api_router.post("/support")
+async def create_support_request(inp: SupportInput, user: dict = Depends(get_current_user)):
+    doc = {
+        "request_id": make_id("sup"),
+        "user_id": user["user_id"],
+        "user_email": user.get("email"),
+        "user_name": user.get("name"),
+        "subject": inp.subject.strip(),
+        "message": inp.message.strip(),
+        "status": "aperta",
+        "created_at": now_utc().isoformat(),
+    }
+    await db.support_requests.insert_one(doc)
+    who = escape(user.get("name") or "Utente")
+    mail = escape(user.get("email") or "email non disponibile")
+    await send_email(
+        to=SUPPORT_EMAIL,
+        subject=f"[Assistenza Bolty] {doc['subject']}",
+        html=_email_template(
+            "Nuova richiesta di assistenza",
+            f"<p><strong>{who}</strong> ({mail}) ha scritto:</p><p>{escape(doc['message']).replace(chr(10), '<br>')}</p><p>ID richiesta: {doc['request_id']}</p>",
+        ),
+    )
+    if user.get("email"):
+        await send_email(
+            to=user["email"],
+            subject="Abbiamo ricevuto la tua richiesta — BOLTY",
+            html=_email_template("Richiesta ricevuta", f"<p>Ciao {who}, abbiamo ricevuto la tua richiesta <strong>{escape(doc['subject'])}</strong>. Ti risponderemo entro 2 giorni lavorativi.</p>"),
+        )
+    return {"ok": True, "request_id": doc["request_id"]}
+
+
+# ---------------------------------------------------------------------------
+# LEGAL PAGES (public, HTTPS)
+# ---------------------------------------------------------------------------
+@api_router.get("/legal/privacy", response_class=HTMLResponse)
+async def legal_privacy():
+    return legal.privacy_html()
+
+
+@api_router.get("/legal/terms", response_class=HTMLResponse)
+async def legal_terms():
+    return legal.terms_html()
+
+
+@api_router.get("/legal/support", response_class=HTMLResponse)
+async def legal_support():
+    return legal.support_html()
 
 
 # ---------------------------------------------------------------------------

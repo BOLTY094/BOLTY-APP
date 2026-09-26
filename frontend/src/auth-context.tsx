@@ -27,6 +27,7 @@ type AuthContextType = {
   loginWithGoogle: () => Promise<void>;
   loginWithApple: () => Promise<void>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   refresh: () => Promise<void>;
 };
 
@@ -187,6 +188,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     const identityToken = credential.identityToken;
     if (!identityToken) throw new Error("Apple: token mancante");
+    // authorizationCode lets the backend obtain a refresh token, required to revoke the
+    // Sign in with Apple grant when the user deletes the account (Apple 5.1.1(v)).
+    const authorizationCode = credential.authorizationCode || null;
     const fullName = credential.fullName
       ? [credential.fullName.givenName, credential.fullName.familyName].filter(Boolean).join(" ")
       : undefined;
@@ -197,6 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         identity_token: identityToken,
         name: fullName || null,
         email: credential.email || null,
+        authorization_code: authorizationCode,
       },
     });
     await setToken(data.token);
@@ -212,12 +217,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  const deleteAccount = useCallback(async () => {
+    await api("/auth/me", { method: "DELETE" });
+    await clearToken();
+    setWelcomePending(false);
+    setUser(null);
+  }, []);
+
   const refresh = useCallback(async () => {
     await checkExisting();
   }, [checkExisting]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, welcomePending, consumeWelcome, login, register, loginWithGoogle, loginWithApple, logout, refresh }}>
+    <AuthContext.Provider value={{ user, loading, welcomePending, consumeWelcome, login, register, loginWithGoogle, loginWithApple, logout, deleteAccount, refresh }}>
       {children}
     </AuthContext.Provider>
   );

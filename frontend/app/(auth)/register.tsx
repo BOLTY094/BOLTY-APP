@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
 import { useAuth } from "@/src/auth-context";
+import { openLegal } from "@/src/legal";
 import { useToast } from "@/src/toast";
 import { BoltyLogo } from "@/src/components/logo";
 import { Button, TextField, H1, Muted } from "@/src/components/ui";
@@ -61,6 +62,13 @@ export default function Register() {
       <TextField label="Password" value={password} onChangeText={setPassword} placeholder="Almeno 6 caratteri" secureTextEntry testID="register-password" />
       <TextField label="Codice invito" value={referral} onChangeText={setReferral} placeholder="Es. A1B2C3" autoCapitalize="characters" optional testID="register-referral" />
 
+      <Text style={s.legal} testID="register-legal">
+        Registrandoti accetti i{" "}
+        <Text style={s.footerLink} onPress={() => openLegal("terms").catch(() => {})} testID="register-terms">Termini di servizio</Text>
+        {" "}e la{" "}
+        <Text style={s.footerLink} onPress={() => openLegal("privacy").catch(() => {})} testID="register-privacy">Privacy Policy</Text>.
+      </Text>
+
       <Button title="Registrati" onPress={onRegister} loading={loading} testID="register-submit" />
 
       <Pressable onPress={() => router.back()} style={s.footer} testID="go-login">
@@ -85,6 +93,7 @@ const useStyles = makeStyles((colors) => ({
     marginBottom: spacing.md,
   },
   logo: { fontFamily: fonts.bold, fontSize: 30, color: colors.brandPrimary, letterSpacing: 1 },
+  legal: { color: colors.muted, fontFamily: fonts.regular, fontSize: fontSize.sm, lineHeight: 18, marginBottom: spacing.lg },
   footer: { alignItems: "center", marginTop: spacing.xl },
   footerText: { color: colors.muted, fontFamily: fonts.regular, fontSize: fontSize.base },
   footerLink: { color: colors.brandPrimary, fontFamily: fonts.semibold },

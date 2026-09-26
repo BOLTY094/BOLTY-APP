@@ -8,6 +8,7 @@ import { CheckSquare, Square, FileText, CheckCircle } from "phosphor-react-nativ
 
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
+import { openLegal } from "@/src/legal";
 import { useToast } from "@/src/toast";
 import { ScreenHeader } from "@/src/components/screen-header";
 import { SignaturePad } from "@/src/components/signature-pad";
@@ -164,7 +165,12 @@ export default function Contract() {
 
             <Pressable style={s.checkRow} onPress={() => setAccepted((v) => !v)} testID="accept-terms">
               {accepted ? <CheckSquare size={26} color={colors.brandPrimary} weight="fill" /> : <Square size={26} color={colors.borderStrong} />}
-              <Text style={s.checkText}>Ho letto e accetto le condizioni contrattuali e la privacy policy.</Text>
+              <Text style={s.checkText}>
+                Ho letto e accetto le{" "}
+                <Text style={s.link} onPress={() => openLegal("terms").catch(() => {})} testID="contract-terms-link">condizioni contrattuali</Text>
+                {" "}e la{" "}
+                <Text style={s.link} onPress={() => openLegal("privacy").catch(() => {})} testID="contract-privacy-link">Privacy Policy</Text>.
+              </Text>
             </Pressable>
 
             <H2 style={{ marginTop: spacing.lg, marginBottom: spacing.sm }}>Firma digitale</H2>
@@ -196,6 +202,7 @@ const useStyles = makeStyles((colors) => ({
   docTitle: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.onSurface },
   checkRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md, marginTop: spacing.lg },
   checkText: { flex: 1, fontFamily: fonts.regular, fontSize: fontSize.base, color: colors.onSurface, lineHeight: 20 },
+  link: { color: colors.brandPrimary, fontFamily: fonts.semibold },
   footer: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.divider },
   successWrap: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.xl },
   successIcon: { width: 120, height: 120, borderRadius: 60, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" },

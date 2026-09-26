@@ -61,3 +61,13 @@ Piattaforma mobile dove il cliente carica la bolletta (luce/gas/telefonia), rice
 - Endpoint: `GET /api/market/overview` (auth), `POST /api/admin/market/refresh` (admin, forza aggiornamento).
 - Frontend `market.tsx`: etichetta fonte, tag mese di riferimento, riga "mese in corso" (luce), costo materia prima €/kWh–€/Smc, badge "Dati reali aggiornati il…", fonti. Home card mostra mese di riferimento.
 - Test iteration_4: 33/33 pytest, UI verificata.
+
+## Iterazione 5-6 — Conformità App Store (Set 2026) · v1.1.0 (build 2)
+- Eliminazione account: tab Profilo → "Elimina account" → schermata di conferma (`app/delete-account.tsx`, checkbox + dialog) → `DELETE /api/auth/me` (clienti; admin 403) cancella utente, sessioni, bollette + file (object storage non ha DELETE: il file viene sovrascritto a 0 byte), offerte, contratti, notifiche, premi, richieste assistenza; referral degli altri utenti scollegati; logout automatico. Apple: il backend riceve `authorization_code`, scambia/salva refresh token e revoca alla cancellazione SOLO se configurati `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` (altrimenti skip, `apple_revoked=false`).
+- Pagine legali pubbliche HTTPS servite dal backend (`backend/legal.py`): `/api/legal/privacy`, `/api/legal/terms`, `/api/legal/support`; dati azienda via env `LEGAL_COMPANY_NAME/ADDRESS/VAT/PRIVACY_EMAIL`. Link in login, registrazione, contratto (checkbox), Profilo.
+- Assistenza (`app/support.tsx`): email `SUPPORT_EMAIL` (mailto) + modulo in-app `POST /api/support` (salva in `support_requests`, email a supporto e conferma all'utente) + FAQ.
+- app.json: version 1.1.0, ios.buildNumber "2", android.versionCode 2, `usesNonExemptEncryption:false`, `ios.privacyManifests` (UserDefaults CA92.1, FileTimestamp C617.1, SystemBootTime 35F9.1, DiskSpace E174.1 + dati raccolti), splash `#FFFFFF`.
+- Font Plus Jakarta Sans bundlati in `assets/fonts` (niente CDN).
+- Bug fix: crash OfferDetail (`Circle` → `CircleIcon` phosphor 3.x); toast `pointerEvents` in style.
+- Test: iteration_5 (47/47 pytest + UI) e iteration_6 (retest flusso offerta→contratto OK).
+- Da completare dal cliente: email assistenza reale, dati societari nelle pagine legali, credenziali Apple per revoca token (opzionale), test su iPhone reale.

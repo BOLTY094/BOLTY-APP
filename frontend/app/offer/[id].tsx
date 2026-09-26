@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { ArrowDown, TrendUp, CheckCircle, Circle, Clock } from "phosphor-react-native";
+import { ArrowDown, TrendUp, CheckCircle, CircleIcon, Clock } from "phosphor-react-native";
 
 import { api } from "@/src/api";
 import { ScreenHeader } from "@/src/components/screen-header";
@@ -107,7 +107,7 @@ export default function OfferDetail() {
                     ) : isCurrent ? (
                       <Clock size={26} color={colors.warning} weight="fill" />
                     ) : (
-                      <Circle size={26} color={colors.borderStrong} />
+                      <CircleIcon size={26} color={colors.borderStrong} />
                     )}
                     <Text style={[s.timelineText, { color: done ? colors.onSurface : colors.muted }]}>{step.label}</Text>
                   </View>

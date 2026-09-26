@@ -96,11 +96,11 @@ export const fonts = {
   bold: "JakartaBold",
 } as const;
 
-export const fontSources: Record<string, string> = {
-  Jakarta: "https://cdn.jsdelivr.net/fontsource/fonts/plus-jakarta-sans@latest/latin-400-normal.ttf",
-  JakartaMedium: "https://cdn.jsdelivr.net/fontsource/fonts/plus-jakarta-sans@latest/latin-500-normal.ttf",
-  JakartaSemiBold: "https://cdn.jsdelivr.net/fontsource/fonts/plus-jakarta-sans@latest/latin-600-normal.ttf",
-  JakartaBold: "https://cdn.jsdelivr.net/fontsource/fonts/plus-jakarta-sans@latest/latin-700-normal.ttf",
+export const fontSources: Record<string, any> = {
+  Jakarta: require("../assets/fonts/PlusJakartaSans-Regular.ttf"),
+  JakartaMedium: require("../assets/fonts/PlusJakartaSans-Medium.ttf"),
+  JakartaSemiBold: require("../assets/fonts/PlusJakartaSans-SemiBold.ttf"),
+  JakartaBold: require("../assets/fonts/PlusJakartaSans-Bold.ttf"),
 };
 
 export function categoryColors(colors: ThemeColors, category: string) {
