@@ -14,7 +14,7 @@ import httpx
 import requests
 from bson import ObjectId
 from dotenv import load_dotenv
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFile, File, Form, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFile, File, Form, Query, Request
 from fastapi.responses import Response, HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
@@ -57,6 +57,8 @@ EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO")
 ADMIN_EMAIL = os.environ["ADMIN_EMAIL"]
 ADMIN_PASSWORD = os.environ["ADMIN_PASSWORD"]
 ADMIN_NAME = os.environ.get("ADMIN_NAME", "Admin")
+# Inbox that receives operational notifications (new bills, support requests). Defaults to the admin login email.
+ADMIN_NOTIFY_EMAIL = os.environ.get("ADMIN_NOTIFY_EMAIL", "").strip() or ADMIN_EMAIL
 
 REFERRAL_REWARD = float(os.environ.get("REFERRAL_REWARD", "20"))
 
@@ -69,7 +71,7 @@ APPLE_KEY_ID = os.environ.get("APPLE_KEY_ID", "").strip()
 APPLE_PRIVATE_KEY = os.environ.get("APPLE_PRIVATE_KEY", "").replace("\\n", "\n").strip()
 APPLE_REVOKE_ENABLED = bool(APPLE_TEAM_ID and APPLE_KEY_ID and APPLE_PRIVATE_KEY and APPLE_AUDIENCES)
 
-SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "").strip() or ADMIN_EMAIL
+SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "").strip() or ADMIN_NOTIFY_EMAIL
 
 
 def apple_jwk_client():
@@ -185,6 +187,35 @@ def verify_password(password: str, hashed: str) -> bool:
 def create_jwt(user_id: str) -> str:
     payload = {"user_id": user_id, "exp": now_utc() + timedelta(days=7), "iat": now_utc()}
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+
+
+FILE_LINK_DAYS = int(os.environ.get("FILE_LINK_DAYS", "7"))
+
+
+def create_file_token(path: str) -> str:
+    """Short-lived, single-purpose token that opens ONE stored file (used in the admin email link)."""
+    payload = {"scope": "file", "path": path, "exp": now_utc() + timedelta(days=FILE_LINK_DAYS), "iat": now_utc()}
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+
+
+def verify_file_token(token: Optional[str], path: str) -> bool:
+    if not token:
+        return False
+    try:
+        claims = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+    except Exception:
+        return False
+    return claims.get("scope") == "file" and claims.get("path") == path
+
+
+def public_base_url(request: Request) -> str:
+    """Public https origin of this API as seen by the client (works behind the ingress and after deploy)."""
+    configured = (os.environ.get("APP_PUBLIC_URL") or "").strip().rstrip("/")
+    if configured:
+        return configured
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    host = host.split(",")[0].strip()
+    return f"https://{host}"
 
 
 async def get_user_by_token(authorization: Optional[str]) -> Optional[dict]:
@@ -704,6 +735,7 @@ def compute_analysis(category: str, extracted: dict) -> dict:
 
 @api_router.post("/upload")
 async def upload_bill(
+    request: Request,
     file: UploadFile = File(...),
     category: str = Form(...),
     user: dict = Depends(get_current_user),
@@ -741,10 +773,31 @@ async def upload_bill(
     await db.bills.insert_one(bill)
     await notify(
         user["user_id"], "Bolletta ricevuta",
-        f"Abbiamo ricevuto la tua bolletta <strong>{escape(category)}</strong>. La analizziamo subito e ti avvisiamo appena è pronta la proposta.",
+        f"Abbiamo ricevuto la tua bolletta <strong>{escape(category)}</strong>. La analizziamo subito e ti avvisiamo appena è pronta la proposta. "
+        "Per la tua privacy il file non viene allegato alle email: lo trovi sempre nella sezione Bollette dell'app.",
         "Bolletta ricevuta — BOLTY",
     )
+    await notify_admin_new_bill(request, bill)
     return clean(bill)
+
+
+async def notify_admin_new_bill(request: Request, bill: dict) -> None:
+    """Email the administrator about a new bill, with a secure expiring link to open the file."""
+    try:
+        link = f"{public_base_url(request)}/api/files/{bill['storage_path']}?token={create_file_token(bill['storage_path'])}"
+        who = escape(bill.get("user_name") or "Cliente")
+        mail = escape(bill.get("user_email") or "email non disponibile")
+        fname = escape(bill.get("file_name") or "bolletta")
+        html = _email_template(
+            "Nuova bolletta da analizzare",
+            f"<p><strong>{who}</strong> ({mail}) ha caricato una bolletta <strong>{escape(bill['category'])}</strong>.</p>"
+            f"<p>File: <strong>{fname}</strong> · ID: {escape(bill['bill_id'])}</p>"
+            f"<p><a href=\"{link}\" style=\"display:inline-block;background:#16213E;color:#ffffff;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:600\">Apri la bolletta</a></p>"
+            f"<p style=\"font-size:12px;color:#6B7185\">Il link è personale e scade tra {FILE_LINK_DAYS} giorni. Puoi anche aprire la bolletta dall'app Bolty nella coda amministratore.</p>",
+        )
+        await send_email(to=ADMIN_NOTIFY_EMAIL, subject=f"Nuova bolletta {bill['category']} da {bill.get('user_name') or 'cliente'} — BOLTY", html=html)
+    except Exception as e:
+        logger.warning(f"Admin bill notification failed: {e}")
 
 
 @api_router.get("/bills")
@@ -802,15 +855,18 @@ async def delete_bill(bill_id: str, user: dict = Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 @api_router.get("/files/{path:path}")
 async def get_file(path: str, authorization: Optional[str] = Header(None), token: Optional[str] = Query(None)):
-    auth_header = authorization or (f"Bearer {token}" if token else None)
-    user = await get_user_by_token(auth_header)
-    if not user:
+    if not token and not authorization:
         raise HTTPException(status_code=401, detail="Non autenticato")
     bill = await db.bills.find_one({"storage_path": path}, {"_id": 0})
     if not bill:
         raise HTTPException(status_code=404, detail="File non trovato")
-    if bill["user_id"] != user["user_id"] and user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Non autorizzato")
+    if not verify_file_token(token, path):
+        auth_header = authorization or (f"Bearer {token}" if token else None)
+        user = await get_user_by_token(auth_header)
+        if not user:
+            raise HTTPException(status_code=401, detail="Non autenticato")
+        if bill["user_id"] != user["user_id"] and user.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Non autorizzato")
     try:
         content, content_type = await run_in_threadpool(get_object, path)
     except Exception as e:

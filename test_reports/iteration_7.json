@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 7 — validated the new admin bill-notification email + secure expiring file link. Wrote a new focused pytest module /app/backend/tests/test_admin_notify_and_file_token.py (14 tests, ONE upload total to minimize admin-Gmail spam) and ran the full backend suite once → 61/61 green in ~18s after fixing one stale assertion in test_deletion_legal_support.py::TestLegal::test_legal_info (support_email now comes from env / owner's real Gmail per Jan 2026 fix, not the hard-coded assistenza@bolty.it). Verified in /var/log/supervisor/backend.err.log that after mario@test.it upload the customer email to *@test.it returned 422 'unknown' (undeliverable, expected) and the admin notify email to amministrazioneverbagroup@gmail.com returned 202 Accepted — upload endpoint still returned 200, proving notify_admin_new_bill is correctly wrapped in try/except (also asserted statically). /api/files/{storage_path}?token=<file_token> tested: (a) valid token → 200 application/pdf with non-empty body, (b) token for a different path → 401, (c) malformed → 401, (d) expired (exp in the past) → 401, (e) wrong scope (scope!=file) → 401, (f) no auth at all → 401. Bearer auth on the same endpoint: owner Mario → 200, admin@bolty.it → 200, a different customer's Bearer → 403. Called server.public_base_url on a FakeRequest and confirmed it prefers x-forwarded-host over host and returns https://<host>. server.create_file_token / verify_file_token unit-tested (path binding + scope check). FRONTEND (390x844 web preview): login mario@test.it / Test1234 succeeds via [data-testid=login-submit], Home shows 'Le tue ultime bollette' with the uploaded Luce bill, Bollette tab (/bollette) lists all bills, tapping the first bill navigates to /bill/{bill_id} and the detail screen renders cleanly (La tua situazione + Dati estratti + Possibile risparmio + Correggi CTA + waiting-consultant footer) with NO red error boundary and no page errors. Total real admin emails triggered in this iteration: 2 (1 from the focused module + 1 from backend_test.py TestFlow.test_full_flow).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "app/bill/[id].tsx", "issue": "Customer bill detail has NO file preview / 'Apri file' action, yet the customer email 'Bolletta ricevuta' now says the file 'lo trovi sempre nella sezione Bollette dell'app'. Consider adding a 'Apri file' button that opens /api/files/{storage_path} with the current Bearer token (owner path already supported). Not blocking — screen renders correctly.", "testID": "n/a", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin_notify_and_file_token.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_apple_auth.py",
+    "/app/backend/tests/test_deletion_legal_support.py",
+    "/app/backend/tests/test_market.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/admin_notify_file_token.xml"
+  ],
+  "action_items": [
+    "Optional UX: on customer bill detail (app/bill/[id].tsx), add an 'Apri file' button that opens /api/files/{storage_path} using the user's Bearer token so the copy in the 'Bolletta ricevuta' email ('lo trovi sempre nella sezione Bollette dell'app') is truthful. Backend already supports this via /api/files owner Bearer auth."
+  ],
+  "critical_code_review_comments": [
+    "server.py:784-800 notify_admin_new_bill is wrapped in try/except so email service failures (422/429/network) cannot break /api/upload — verified live (customer 422 + admin 202, upload still 200).",
+    "server.py:211-218 public_base_url correctly prefers x-forwarded-host then host, splits on comma, and returns https:// — the link in the admin email uses the public ingress host as intended (verified with a FakeRequest fixture).",
+    "server.py:195-208 create_file_token/verify_file_token are correctly scoped (scope='file') and path-bound: swapping the path or the scope, or using an expired jwt, all fail closed to 401 in /api/files (server.py:856-869).",
+    "server.py:857-869 /api/files first tries the file token; on failure it falls back to Bearer auth including the owner-vs-admin ACL — validated with owner 200, admin 200, other customer 403.",
+    "backend/.env ADMIN_NOTIFY_EMAIL=amministrazioneverbagroup@gmail.com and SUPPORT_EMAIL=same — matches the review request; each real upload sends a real email, so pytest suite must be run sparingly."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_admin_notify_and_file_token.py (new — 14 focused tests, one upload)",
+    "/app/backend/tests/test_deletion_legal_support.py (fixed stale hard-coded support_email assertion → validate shape instead)"
+  ],
+  "success_rate": {"backend": "100% (61/61)", "frontend": "100% — login + Bollette listing + bill detail all green, no crash"},
+  "seed_data_creation": "One TEST_-prefixed 'other customer' user (for the 403 negative test) registered via /api/auth/register and deleted via DELETE /api/auth/me at module teardown. Mario's uploaded bill remains on his account (needed for the frontend bill-detail check) — is left in place because Mario is the shared test customer and cleaning it would nuke fixture state.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Real admin emails hit amministrazioneverbagroup@gmail.com on every successful /api/upload. Any iteration that runs backend_test.py::TestFlow::test_full_flow OR test_admin_notify_and_file_token.py OR performs a manual upload triggers ONE real email each — keep uploads to the strict minimum. The focused module is idempotent for the login-mario side but always uploads exactly 1 file. When testing UI, prefer directly hitting /bill/{id} for existing bills (Mario already has ≥7) instead of triggering a fresh upload.",
+  "rca_of_issue": "Original bug: admin received the 'nuova bolletta' email without the PDF because the managed Resend integration does not support attachments and *@test.it/*@bolty.it recipients are rejected 422. Fix (already implemented in server.py): (1) new create_file_token/verify_file_token — HS256 JWT with scope='file' + storage path + 7d exp; (2) /api/upload emails ADMIN_NOTIFY_EMAIL (real Gmail) with an https link https://<public-host>/api/files/{storage_path}?token=<jwt> using public_base_url(x-forwarded-host); (3) /api/files accepts the file token OR Bearer auth; (4) notify_admin_new_bill wrapped in try/except so email failures do not fail the upload; (5) customer 'Bolletta ricevuta' email text updated to explain the file is not attached for privacy and is available in the app. All five layers verified in this iteration."
+}

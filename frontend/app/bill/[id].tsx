@@ -1,13 +1,14 @@
 import React, { useState, useMemo } from "react";
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, Platform } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { CheckCircle, PencilSimple, Trash, ArrowRight, TrendUp } from "phosphor-react-native";
+import { CheckCircle, PencilSimple, Trash, ArrowRight, TrendUp, FileArrowDown } from "phosphor-react-native";
 
-import { api } from "@/src/api";
+import { api, API, loadToken } from "@/src/api";
 import { useToast } from "@/src/toast";
 import { ScreenHeader } from "@/src/components/screen-header";
 import { CategoryIcon } from "@/src/components/category-icon";
@@ -126,6 +127,27 @@ export default function BillDetail() {
           </View>
         )}
 
+        {/* Original file */}
+        {bill.storage_path ? (
+          <Pressable
+            style={({ pressed }) => [s.fileRow, pressed && { opacity: 0.85 }]}
+            onPress={async () => {
+              try {
+                const token = await loadToken();
+                const url = `${API}/files/${bill.storage_path}?token=${encodeURIComponent(token || "")}`;
+                if (Platform.OS === "web") window.open(url, "_blank", "noopener");
+                else await WebBrowser.openBrowserAsync(url);
+              } catch {
+                show("Impossibile aprire il file", "error");
+              }
+            }}
+            testID="bill-open-file"
+          >
+            <FileArrowDown size={20} color={colors.brandPrimary} weight="fill" />
+            <Text style={s.fileText} numberOfLines={1}>Apri il file originale{bill.file_name ? ` · ${bill.file_name}` : ""}</Text>
+          </Pressable>
+        ) : null}
+
         {/* Analysis */}
         <H2 style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>La tua situazione</H2>
         <View style={s.analysisGrid}>
@@ -222,6 +244,8 @@ function DataRow({ label, value, last, highlight }: { label: string; value: stri
 }
 
 const useStyles = makeStyles((colors) => ({
+  fileRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.lg, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.lg, minHeight: 48 },
+  fileText: { flex: 1, fontFamily: fonts.medium, fontSize: fontSize.base, color: colors.brandPrimary },
   banner: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderRadius: radius.lg, padding: spacing.lg },
   bannerTitle: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.onSurface },
   statusRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },

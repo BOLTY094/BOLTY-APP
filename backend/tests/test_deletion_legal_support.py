@@ -73,7 +73,10 @@ class TestLegal:
         r = requests.get(f"{API}/legal/info", timeout=30)
         assert r.status_code == 200
         data = r.json()
-        assert data["support_email"] == "assistenza@bolty.it"
+        # SUPPORT_EMAIL now comes from backend/.env (owner's real inbox as of Jan 2026);
+        # validate shape rather than a hard-coded value so the test stays green when
+        # ops rotate the address.
+        assert isinstance(data["support_email"], str) and "@" in data["support_email"]
         assert data["privacy_path"] == "/api/legal/privacy"
         assert data["terms_path"] == "/api/legal/terms"
         assert data["support_path"] == "/api/legal/support"
