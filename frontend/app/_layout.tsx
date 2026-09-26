@@ -37,7 +37,8 @@ function RootNavigator() {
       return;
     }
     if (user.role === "admin") {
-      if (root !== "(admin)" && root !== "admin" && root !== "welcome") router.replace("/(admin)");
+      const allowed = ["(admin)", "admin", "welcome", "change-password", "support", "notifications"];
+      if (!allowed.includes(root as string)) router.replace("/(admin)");
     } else {
       if (inAuth || !root || root === "(admin)" || root === "admin") router.replace("/(tabs)");
     }

@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text } from "react-native";
 import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
 
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
@@ -12,6 +13,7 @@ import { makeStyles, spacing, fonts, fontSize } from "@/src/theme";
 export default function AdminImpostazioni() {
   const s = useStyles();
   const { user, logout } = useAuth();
+  const router = useRouter();
   const { data: info } = useQuery({ queryKey: ["legal-info"], queryFn: () => api("/legal/info", { auth: false }) });
   const { data: audit, isLoading } = useQuery({ queryKey: ["admin-audit"], queryFn: () => api("/admin/audit?limit=30") });
 
@@ -25,6 +27,9 @@ export default function AdminImpostazioni() {
         <Row l="Email notifiche / assistenza" v={info?.support_email} />
         <Muted style={{ marginTop: spacing.sm, fontSize: fontSize.sm }}>Le email di notifica (nuove bollette con file originale allegato, richieste di contatto, assistenza) vengono inviate alla casella configurata sul server (ADMIN_NOTIFY_EMAIL / SUPPORT_EMAIL).</Muted>
       </Card>
+
+      <H2 style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>Sicurezza</H2>
+      <Button title="Cambia password" onPress={() => router.push("/change-password")} testID="admin-change-password" />
 
       <H2 style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>Pagine legali pubbliche</H2>
       <View style={{ gap: spacing.sm }}>

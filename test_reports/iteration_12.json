@@ -1,0 +1,27 @@
+{
+  "summary": "Iteration 12 - Re-tested the admin routing fix applied to /app/frontend/app/_layout.tsx:40 (whitelist now includes 'change-password','support','notifications'). FRONTEND (web 1100x800, Playwright): (1) Admin login admin@bolty.it / Bolty!Admin2026 -> lands on admin home '/'. (2) Click admin-menu-Impostazioni -> /impostazioni. (3) Click admin-change-password -> URL becomes /change-password AND all four testIDs visible: change-password-header, pw-current, pw-new, pw-confirm, pw-submit. (4) Dwelled 1.5s -> URL and pw-submit still visible (NO bounce back to /(admin) - previous iteration 11 bug is fixed). (5) go_back() -> /impostazioni (admin area). (6) Direct URL /change-password as admin -> renders (pw-submit visible). (7) Admin -> /(tabs) redirected to '/' (admin dashboard). (8) Admin -> /referral redirected to '/' (admin dashboard, guard still keeps admins out of customer routes). (9) Admin logout -> /login. (10) Customer login mario@test.it / Test1234 -> lands on '/' (customer home). (11) Customer -> /(admin) redirected to '/' (403 on /api/admin/* observed in console, expected). (12) Customer -> /change-password renders (change-password-header + pw-submit visible). NO password submissions were performed - admin password remains Bolty!Admin2026 and customer password remains Test1234. Backend was not exercised (iteration 11 already verified 11/11 change-password + 53/53 regression). No React Native/Expo deprecations spotted in the touched files.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_11.json (previous)",
+    "/app/backend/tests/test_change_password.py (unchanged, prior iteration)"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "/app/frontend/app/_layout.tsx:39-44 - admin guard now uses an allow-list including 'change-password','support','notifications' AND still redirects customers away from '(admin)'/'admin' roots. Verified at runtime for both roles.",
+    "No other code touched in this iteration; the change is minimal and correct.",
+    "Note (info, not blocking): a customer hitting /(admin) briefly issues admin API calls that return 403 before the guard replaces the URL to '/' - visually invisible and does not leak data, but if desired the guard could bail out earlier (memoized) to avoid the 403 flash in Network tab."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not exercised this iteration)", "frontend": "100% (12/12 routing checks pass)"},
+  "seed_data_creation": "None. No accounts created or modified. Admin and customer passwords were NOT changed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 11 bug (admin unable to reach /change-password) is fully resolved by the _layout.tsx whitelist expansion. Both roles now behave correctly: admin can open /change-password (via Impostazioni button and via direct URL) and stays there; admin is still redirected away from customer routes (/(tabs), /referral); customer is redirected away from /(admin) and can still open /change-password. Nothing further to retest for this fix.",
+  "rca_of_issue": "Previously in /app/frontend/app/_layout.tsx the admin guard whitelisted only '(admin)','admin','welcome' so any other top-level route (including 'change-password') triggered router.replace('/(admin)') on every render, unmounting the screen. The fix extends the whitelist to also include 'change-password','support','notifications'. Reproduction now yields the expected behaviour (see summary steps 3-6)."
+}

@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 11 - 'Cambia password' feature end-to-end validated. BACKEND (new /app/backend/tests/test_change_password.py, 11 tests, ALL PASS): customer full flow - register + two logins yield tokens A/B, PUT /api/auth/password with A -> wrong current 401, weak 'tuttominuscolo' 422, same-as-current 400, valid 'Nuova1234' 200 returning {ok:true, token:...}; tokens A and B on GET /api/auth/me both 401 (password_version pv bumped), the returned token 200; login with old password 401, new password 200; second change to 'Altra5678' 200; DELETE /api/auth/me 200 and the freshest token then 401. Missing token on /auth/password -> 401. Admin round-trip: login as admin, change to 'Temp!Admin2026x' -> old admin token 401, new token 200, GET /api/admin/audit returns a list containing action 'change_password' with admin_email admin@bolty.it, login with old password 401 / temp password 200; ALWAYS restore to 'Bolty!Admin2026' (verified at end: /api/auth/login returns 200). Seed code review /app/backend/server.py:1401-1417 - startup inserts admin only when missing and otherwise only updates role, so a changed admin password survives backend restarts (idempotent, as required). REGRESSION (subset requested): /app/backend/tests/test_admin_panel.py::TestAdminAuthorization + ::TestCustomerCrossAccess + ::TestOldDashboardStillExists, test_apple_auth.py, test_market.py -> 53 passed / 0 failed (JUnit /app/test_reports/pytest/regression_subset.xml). FRONTEND (Expo web preview): registered a fresh TEST_pwui_<ts>@esempio.it via /(auth)/register (390x844), navigated to Profilo -> profile-change-password -> /change-password: pw-submit disabled with empty fields (aria-disabled=true); mismatching confirm -> toast 'Le due password non coincidono' (matched); weak password -> toast 'La nuova password deve avere almeno 8 caratteri...' (matched); wrong current -> toast 'La password attuale non e corretta' (matched, backend returned 401); valid change -> success toast 'Password aggiornata...' and router.back() to /profilo; home /(tabs)/ still loads without re-login (fresh token was stored). After logout, login with the old password fails, with the new password succeeds and the app opens on Home ('Analizza la mia bolletta' visible). Temp account deleted via DELETE /api/auth/me (200) and relogin returns 401 - no test data left behind. Admin creds re-verified at the end: admin@bolty.it / Bolty!Admin2026 -> 200; mario@test.it / Test1234 -> 200 (unchanged as required). CRITICAL FRONTEND BUG discovered on the admin entry point: the admin-change-password button navigates to /change-password but /app/frontend/app/_layout.tsx:39-40 redirects any admin whose root segment is not '(admin)'/'admin'/'welcome' back to '/(admin)' - so the change-password screen never renders for admin (verified by clicking admin-change-password from Impostazioni and by direct navigation to /change-password: both bounce back to /(admin) dashboard, pw-submit never visible). The customer flow is unaffected (guard only redirects customers away from (admin)/(auth) roots).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "app/_layout.tsx (RootNavigator)",
+        "issue": "Admin users are hard-redirected away from any route whose first segment is not '(admin)'/'admin'/'welcome'. This makes the /change-password screen unreachable for admin: clicking admin-change-password in Impostazioni (or direct-navigating to /change-password) immediately bounces back to /(admin). Fix: allow additional whitelisted routes (e.g. 'change-password') for admins, or move change-password under /(admin)/change-password. Reference: /app/frontend/app/_layout.tsx:39-40.",
+        "testID": "admin-change-password",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_change_password.py",
+    "/app/test_reports/pytest/change_password.xml",
+    "/app/test_reports/pytest/regression_subset.xml"
+  ],
+  "action_items": [
+    "Fix admin routing so /change-password renders for admins. Simplest patch: update the guard in /app/frontend/app/_layout.tsx to also treat root === 'change-password' (and any other cross-role screens like /notifications if applicable) as allowed for admins, e.g.: `if (user.role === 'admin' && !['(admin)','admin','welcome','change-password'].includes(root)) router.replace('/(admin)');`. Alternatively add a /(admin)/change-password screen and point admin-change-password there."
+  ],
+  "critical_code_review_comments": [
+    "backend/server.py:1218-1237 PUT /api/auth/password - correctly bumps password_version, deletes user_sessions for the user, writes admin_audit 'change_password' when user is admin, and returns a fresh JWT built with the new pv (verified: previous tokens return 401 via get_current_user's pv check at line 250).",
+    "backend/server.py:501-512 ChangePasswordInput - Pydantic returns 422 on weak new_password (length + upper/lower/digit + 72-byte cap) before entering the handler; same-as-current and no-password (social) mapped to 400 (verified).",
+    "backend/server.py:1401-1417 admin seed on startup is idempotent (insert only if missing, otherwise only role is refreshed) - so a UI-driven admin password change would persist across restarts. Confirmed by code review, not exercised at runtime.",
+    "frontend/app/change-password.tsx - client-side validation (mismatch, strong regex, same-as-current) surfaces via toast BEFORE calling PUT /auth/password; fresh token saved via setToken then router.back(); for social accounts renders explanatory copy instead of the form (guarded by user.auth_provider).",
+    "frontend/app/(admin)/impostazioni.tsx and (tabs)/profilo.tsx entry-point testIDs 'admin-change-password' / 'profile-change-password' correctly router.push('/change-password'). Only the admin path is broken because of the layout redirect described above."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_change_password.py (new - 11 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (11/11 new change_password tests; 53/53 regression subset)",
+    "frontend": "customer flow 100% (5/5 UI validations + logout/relogin + cleanup); admin entry point 0% - /change-password unreachable for admin due to _layout redirect"
+  },
+  "seed_data_creation": "One temp customer TEST_pwui_1790458575@esempio.it was created via the UI register screen and fully deleted via DELETE /api/auth/me after testing (relogin returns 401). Admin password was changed to a temporary value inside a try/finally and restored to Bolty!Admin2026 (verified via /api/auth/login = 200 at the end). mario@test.it was not modified.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "After main agent fixes the _layout redirect (or moves the screen under /(admin)), re-test only the admin entry point: login admin@bolty.it -> /(admin)/impostazioni -> click admin-change-password -> assert pw-current/pw-new/pw-confirm/pw-submit are all visible; DO NOT submit anything (admin password must stay Bolty!Admin2026). Customer flow and backend are already fully green in this iteration.",
+  "rca_of_issue": "RCA of admin unreachable change-password: /app/frontend/app/_layout.tsx RootNavigator has `if (user.role === 'admin') { if (root !== '(admin)' && root !== 'admin' && root !== 'welcome') router.replace('/(admin)') }`. Since /change-password is a top-level route (root segment 'change-password'), the effect fires on every render for admins and replaces the URL back to /(admin), so the screen mounts for a frame and unmounts immediately. Reproduction: login as admin, open /(admin)/impostazioni, tap admin-change-password (or navigate directly to /change-password) - URL becomes /(admin) and the pw-submit testID is never visible. Mitigation: whitelist 'change-password' (and any other shared screens) in that admin guard, or duplicate the screen under /(admin)/change-password and point the admin button there. Backend and customer paths are unaffected."
+}

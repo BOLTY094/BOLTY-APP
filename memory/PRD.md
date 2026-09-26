@@ -91,3 +91,8 @@ Piattaforma mobile dove il cliente carica la bolletta (luce/gas/telefonia), rice
 - Frontend `(admin)/_layout.tsx`: sidebar ≥900px / menu a chip su telefono; schermate Dashboard (auto-refresh 20s), Bollette, Da analizzare, Clienti (+ `admin/user/[id]`), Richieste di contatto, Contratti, Referral, News (+Aggiorna ora), Notifiche, Impostazioni (registro operazioni, logout). Componenti condivisi `src/components/admin-ui.tsx`. Dettaglio bolletta admin con "Apri il file originale" (Bearer, nessun URL pubblico permanente).
 - Test iteration_10: 34 nuovi test admin + 123 regressione, UI verificata desktop e mobile.
 - Set 2026: ADMIN_NOTIFY_EMAIL, SUPPORT_EMAIL, LEGAL_PRIVACY_EMAIL, EMAIL_REPLY_TO = boltyenergy@libero.it (login admin resta admin@bolty.it).
+
+## Iterazione 11-12 — Cambia password (Set 2026)
+- `PUT /api/auth/password` {current_password, new_password}: 401 password errata, 422 debole (≥8, maiuscola, minuscola, numero, ≤72 byte), 400 uguale/account social; successo → nuovo token. JWT contiene `pv` (password_version): al cambio tutti gli altri token/dispositivi vengono invalidati, sessioni social cancellate; audit admin `change_password`. Seed admin idempotente (la password cambiata non viene resettata al riavvio).
+- Frontend `app/change-password.tsx` (raggiungibile da admin Impostazioni e da Profilo cliente per account email). Root gate: admin può aprire anche change-password/support/notifications.
+- Test iteration_11 (11 nuovi + 53 regressione) e iteration_12 (routing admin).

@@ -21,7 +21,7 @@ from fastapi.responses import Response, HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, Field, EmailStr, BeforeValidator
+from pydantic import BaseModel, Field, field_validator, EmailStr, BeforeValidator
 from html import escape
 from html.parser import HTMLParser
 from urllib.parse import urlparse
@@ -189,8 +189,9 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
-def create_jwt(user_id: str) -> str:
-    payload = {"user_id": user_id, "exp": now_utc() + timedelta(days=7), "iat": now_utc()}
+def create_jwt(user_id: str, password_version: int = 0) -> str:
+    # "pv" ties the token to the password: changing the password invalidates every other token.
+    payload = {"user_id": user_id, "pv": int(password_version or 0), "exp": now_utc() + timedelta(days=7), "iat": now_utc()}
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
 
 
@@ -246,6 +247,8 @@ async def get_user_by_token(authorization: Optional[str]) -> Optional[dict]:
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
         user = await db.users.find_one({"user_id": payload["user_id"]}, {"_id": 0, "password_hash": 0})
+        if user and int(payload.get("pv", 0)) != int(user.get("password_version", 0)):
+            return None  # token issued before a password change
         return user
     except Exception:
         return None
@@ -495,6 +498,20 @@ class ExtractedData(BaseModel):
     partita_iva: Optional[str] = Field(default=None, max_length=11)
 
 
+class ChangePasswordInput(BaseModel):
+    current_password: str = Field(min_length=1, max_length=200)
+    new_password: str = Field(min_length=8, max_length=72)
+
+    @field_validator("new_password")
+    @classmethod
+    def strong(cls, v: str) -> str:
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("La password non può superare 72 byte")
+        if not (any(c.islower() for c in v) and any(c.isupper() for c in v) and any(c.isdigit() for c in v)):
+            raise ValueError("La nuova password deve contenere almeno una maiuscola, una minuscola e un numero")
+        return v
+
+
 class ContactRequestInput(BaseModel):
     email: Optional[str] = Field(default=None, max_length=120)
     phone: Optional[str] = Field(default=None, max_length=30)
@@ -576,7 +593,7 @@ async def register(inp: RegisterInput):
         "created_at": now_utc().isoformat(),
     }
     await db.users.insert_one(user)
-    token = create_jwt(user["user_id"])
+    token = create_jwt(user["user_id"], user.get("password_version", 0))
     return {"token": token, "user": clean({**user})}
 
 
@@ -585,7 +602,7 @@ async def login(inp: LoginInput):
     user = await db.users.find_one({"email": inp.email.lower()})
     if not user or not user.get("password_hash") or not verify_password(inp.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Credenziali non valide")
-    token = create_jwt(user["user_id"])
+    token = create_jwt(user["user_id"], user.get("password_version", 0))
     return {"token": token, "user": clean({**user})}
 
 
@@ -1196,6 +1213,28 @@ async def admin_update_contract(contract_id: str, inp: ContractStatusInput, admi
         )
     updated = await db.contracts.find_one({"contract_id": contract_id}, {"_id": 0})
     return updated
+
+
+@api_router.put("/auth/password")
+async def change_password(inp: ChangePasswordInput, user: dict = Depends(get_current_user)):
+    """Change password for email/password accounts. Other devices are signed out; a fresh token is returned."""
+    full = await db.users.find_one({"user_id": user["user_id"]})
+    if not full or not full.get("password_hash"):
+        raise HTTPException(status_code=400, detail="Questo account accede con Google/Apple e non ha una password")
+    if not verify_password(inp.current_password, full["password_hash"]):
+        raise HTTPException(status_code=401, detail="La password attuale non è corretta")
+    if inp.current_password == inp.new_password:
+        raise HTTPException(status_code=400, detail="La nuova password deve essere diversa da quella attuale")
+    new_version = int(full.get("password_version", 0)) + 1
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"password_hash": hash_password(inp.new_password), "password_version": new_version, "password_changed_at": now_utc().isoformat()}},
+    )
+    await db.user_sessions.delete_many({"user_id": user["user_id"]})  # revoke social sessions too
+    if user.get("role") == "admin":
+        await db.admin_audit.insert_one({"audit_id": make_id("aud"), "admin_id": user["user_id"], "admin_email": user.get("email"), "action": "change_password", "target": user["user_id"], "details": {}, "created_at": now_utc().isoformat()})
+    logger.info(f"Password changed for {user['user_id']}")
+    return {"ok": True, "token": create_jwt(user["user_id"], new_version)}
 
 
 # ---------------------------------------------------------------------------

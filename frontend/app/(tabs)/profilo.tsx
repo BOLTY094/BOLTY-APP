@@ -9,6 +9,7 @@ import {
   Gift,
   Lifebuoy,
   ShieldCheck,
+  LockKey,
   FileText,
   SignOut,
   Trash,
@@ -77,6 +78,9 @@ export default function Profilo() {
       <View style={s.group}>
         <Item icon={<Bell size={20} color={colors.brand} weight="fill" />} label="Notifiche" badge={unread > 0 ? String(unread) : undefined} onPress={() => router.push("/notifications")} testID="profile-notifications" />
         <Item icon={<Gift size={20} color={colors.brand} weight="fill" />} label="Invita un amico" onPress={() => router.push("/referral")} testID="profile-referral" />
+        {user?.auth_provider === "email" || !user?.auth_provider ? (
+          <Item icon={<LockKey size={20} color={colors.brand} weight="fill" />} label="Cambia password" onPress={() => router.push("/change-password")} testID="profile-change-password" />
+        ) : null}
       </View>
 
       {/* Support & legal */}
