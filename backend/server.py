@@ -1,4 +1,5 @@
 import os
+import asyncio
 import re
 import uuid
 import logging
@@ -22,6 +23,8 @@ from pydantic import BaseModel, Field, EmailStr, BeforeValidator
 from html import escape
 from html.parser import HTMLParser
 from urllib.parse import urlparse
+
+import market
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -978,58 +981,17 @@ async def admin_update_contract(contract_id: str, inp: ContractStatusInput, admi
 
 
 # ---------------------------------------------------------------------------
-# MARKET OVERVIEW (curated, indicative monthly data — not a live feed)
+# MARKET OVERVIEW (live public sources, cached in Mongo — see market.py)
 # ---------------------------------------------------------------------------
-MARKET_MONTHS = ["Giu 25", "Lug 25", "Ago 25", "Set 25", "Ott 25", "Nov 25", "Dic 25", "Gen 26", "Feb 26", "Mar 26", "Apr 26", "Mag 26"]
-# PUN (Prezzo Unico Nazionale) — €/MWh, medie mensili indicative
-PUN_SERIES = [110, 113, 108, 108, 110, 115, 118, 125, 118, 105, 95, 90]
-# PSV (Punto di Scambio Virtuale) — €/MWh, medie mensili indicative
-PSV_SERIES = [38, 36, 34, 33, 32, 30, 31, 33, 32, 30, 29, 28]
-
-
-def _market_block(series: list, months: list, unit: str, year_ago: float, household_unit: str, household_price: str, note: str):
-    current, prev = series[-1], series[-2]
-    delta_m = round((current - prev) / prev * 100, 1)
-    delta_y = round((current - year_ago) / year_ago * 100, 1)
-    trend = "in calo" if delta_m < -1 else "in aumento" if delta_m > 1 else "stabile"
-    return {
-        "current": current,
-        "unit": unit,
-        "previous": prev,
-        "delta_month_pct": delta_m,
-        "delta_year_pct": delta_y,
-        "trend": trend,
-        "series": [{"month": m, "value": v} for m, v in zip(months, series)],
-        "household_unit": household_unit,
-        "household_price": household_price,
-        "note": note,
-    }
-
-
 @api_router.get("/market/overview")
-async def market_overview(user: dict = Depends(get_current_user)):
-    return {
-        "updated_at": "2026-05-31",
-        "disclaimer": "Valori indicativi delle medie mensili all'ingrosso (PUN e PSV). Non costituiscono un'offerta commerciale.",
-        "luce": _market_block(
-            PUN_SERIES, MARKET_MONTHS, "€/MWh", year_ago=95,
-            household_unit="€/kWh",
-            household_price="0,12 – 0,15",
-            note="Il PUN è il prezzo all'ingrosso dell'energia elettrica in Italia. Quando scende, le offerte a prezzo variabile diventano più convenienti.",
-        ),
-        "gas": _market_block(
-            PSV_SERIES, MARKET_MONTHS, "€/MWh", year_ago=36,
-            household_unit="€/Smc",
-            household_price="0,40 – 0,50",
-            note="Il PSV è il riferimento del prezzo del gas all'ingrosso. In estate i prezzi tendono a scendere per la minore domanda di riscaldamento.",
-        ),
-        "insights": [
-            {"title": "Momento favorevole per la luce", "text": "Con il PUN in discesa da inizio anno, vale la pena confrontare la tua offerta attuale: un prezzo variabile indicizzato potrebbe farti risparmiare."},
-            {"title": "Gas: prezzi estivi più bassi", "text": "Il gas costa meno nei mesi caldi. È il periodo ideale per cambiare fornitore prima dell'inverno."},
-            {"title": "Controlla il costo fisso", "text": "Oltre al prezzo dell'energia, verifica la quota fissa mensile e gli oneri: spesso pesano più di quanto sembri."},
-        ],
-        "sources": ["GME – Gestore dei Mercati Energetici (PUN)", "PSV – Punto di Scambio Virtuale", "ARERA – Autorità di Regolazione per Energia Reti e Ambiente"],
-    }
+async def get_market_overview(user: dict = Depends(get_current_user)):
+    return await market.market_overview(db)
+
+
+@api_router.post("/admin/market/refresh")
+async def admin_market_refresh(admin: dict = Depends(get_admin_user)):
+    await market.refresh_market(db, force=True)
+    return await market.market_overview(db)
 
 
 @api_router.get("/")
@@ -1065,6 +1027,9 @@ async def startup():
         await db.offers.create_index("bill_id")
     except Exception as e:
         logger.warning(f"Index creation: {e}")
+
+    # Market prices: refresh from public sources in background (daily check, monthly data)
+    asyncio.create_task(market.refresh_loop(db))
 
     try:
         admin = await db.users.find_one({"email": ADMIN_EMAIL.lower()})

@@ -53,3 +53,11 @@ Piattaforma mobile dove il cliente carica la bolletta (luce/gas/telefonia), rice
 - Backend: `GET /api/market/overview` (auth) — dati curati indicativi (PUN/PSV medie mensili Giu25→Mag26). Scelta utente: dati indicativi, non feed live.
 - Fix: redirect cliente da `/` (segments vuoto) → `/(tabs)` in `_layout.tsx`.
 - Test: iteration_3 — 25/25 pytest (4 nuovi in `tests/test_market.py`), flussi frontend verificati.
+
+## Iterazione 4 — Dati reali di mercato (Set 2026)
+- Scelta utente: fonti pubbliche gratuite senza chiavi; grafico ultimi 12 mesi.
+- Nuovo modulo `backend/market.py`: Luce = media mensile prezzo day-ahead zona IT-North (Energy-Charts / SMARD, CC BY 4.0, riferimento PUN, con "mese in corso"); Gas = tabella ARERA CMEM,m (media mensile ufficiale PSV, €/MWh e €/Smc).
+- Cache Mongo `market_data` (TTL 24h), loop background ogni 6h avviato allo startup, fallback a serie indicative se fonte irraggiungibile e nessuna cache. Insight generati dinamicamente dai trend.
+- Endpoint: `GET /api/market/overview` (auth), `POST /api/admin/market/refresh` (admin, forza aggiornamento).
+- Frontend `market.tsx`: etichetta fonte, tag mese di riferimento, riga "mese in corso" (luce), costo materia prima €/kWh–€/Smc, badge "Dati reali aggiornati il…", fonti. Home card mostra mese di riferimento.
+- Test iteration_4: 33/33 pytest, UI verificata.

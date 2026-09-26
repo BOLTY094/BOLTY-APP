@@ -108,13 +108,13 @@ export default function Home() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.marketTitle}>Andamento energia e gas</Text>
-              <Text style={s.marketSub}>Prezzi di mercato e consigli aggiornati</Text>
+              <Text style={s.marketSub}>Prezzi reali di mercato · {market ? market.reference_month : "aggiornati ogni mese"}</Text>
             </View>
             <ArrowRight size={20} color={colors.onBrand} weight="bold" />
           </View>
           {market ? (
             <View style={s.marketStats}>
-              <MarketStat label="Luce · PUN" value={market.luce.current} unit={market.luce.unit} delta={market.luce.delta_month_pct} testID="home-market-luce" />
+              <MarketStat label="Luce · Nord (rif. PUN)" value={market.luce.current} unit={market.luce.unit} delta={market.luce.delta_month_pct} testID="home-market-luce" />
               <View style={s.marketDivider} />
               <MarketStat label="Gas · PSV" value={market.gas.current} unit={market.gas.unit} delta={market.gas.delta_month_pct} testID="home-market-gas" />
             </View>
@@ -173,21 +173,21 @@ export default function Home() {
   );
 }
 
-function MarketStat({ label, value, unit, delta, testID }: { label: string; value: number; unit: string; delta: number; testID: string }) {
+function MarketStat({ label, value, unit, delta, testID }: { label: string; value: number | null; unit: string; delta: number | null; testID: string }) {
   const s = useStyles();
   const { colors } = useTheme();
-  const down = delta < -0.5;
-  const up = delta > 0.5;
+  const down = delta !== null && delta < -0.5;
+  const up = delta !== null && delta > 0.5;
   return (
     <View style={{ flex: 1 }} testID={testID}>
       <Text style={s.marketStatLabel}>{label}</Text>
       <Text style={s.marketStatValue}>
-        {value} <Text style={s.marketStatUnit}>{unit}</Text>
+        {value === null ? "—" : value.toLocaleString("it-IT", { maximumFractionDigits: 1 })} <Text style={s.marketStatUnit}>{unit}</Text>
       </Text>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
         {down ? <TrendDown size={14} color={colors.accent} weight="bold" /> : up ? <TrendUp size={14} color={colors.error} weight="bold" /> : null}
         <Text style={[s.marketStatDelta, up && { color: colors.error }]}>
-          {delta > 0 ? "+" : ""}{delta.toLocaleString("it-IT")}% sul mese
+          {delta === null ? "—" : `${delta > 0 ? "+" : ""}${delta.toLocaleString("it-IT")}% sul mese`}
         </Text>
       </View>
     </View>

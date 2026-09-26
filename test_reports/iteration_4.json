@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration 4: live market data feature verified end-to-end. Backend: 33/33 pytest passing (previous 25 + 8 new). New test_market.py covers (1) GET /api/market/overview shape with all new keys (reference_month, live, kind, current_month, status, fetched_at, label, household_unit, household_price, month_to_date, note, source, series items with 'key' YYYY-MM), 12 consecutive months ending '2026-08', plausible ranges (luce 20-600, gas 5-300), luce.household_price ≈ current/1000, gas.month_to_date is null. (2) POST /api/admin/market/refresh — 401 no-auth, 403 customer, 200 admin with live=true; verified Mongo market_data collection has kind='luce' and kind='gas' docs with fetched_at ≥ start of test and status='live'. (3) Direct unit tests on market.py helpers: _month_keys('2026-08',12) returns 12 consecutive keys ending 2026-08 (including year rollover case), _last_complete_month returns '2026-08' for Sep-2026 and '2025-12' for Jan-2026, fetch_gas() parses ARERA HTML into {YYYY-MM: {mwh, smc}} with real reachable HTTP request, market_overview against a fresh temporary DB returns live=false and both blocks with status='fallback' without raising, then drops the temp DB. Frontend (light mobile web check, 390x844, mario@test.it/Test1234): home-market card shows Luce 177,1 €/MWh (+13,4%) and Gas 64,2 €/MWh (+13,2%) with subtitle 'Prezzi reali di mercato · Ago 26'. Tap opens /market: market-current='177,1', market-current-month='Ago 26', market-mtd='Set 26 in corso: 207,6 €/MWh' visible on Luce tab and absent on Gas tab. Gas tab shows 64,2 €/MWh 'Ago 26' with PSV label 'media mensile ufficiale (CMEM,m ARERA)'. 12 SVG rect bars rendered. Footer market-updated='Dati reali aggiornati il 26 settembre 2026 · si aggiornano automaticamente ogni mese' with green dot rgb(47,168,79). Two 'Fonte:' lines present (Energy-Charts + ARERA). Deprecated packages detected: none. SafeAreaView issues: none. React Native red screens: none.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_market.py",
+    "/app/backend/tests/test_apple_auth.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "market.py: refresh_market correctly upserts kind='luce'|'gas' with fetched_at ISO string and status='live'; on failure it preserves the cached doc and only writes last_error/last_error_at — good.",
+    "market.py: market_overview returns 'fallback' with FALLBACK series when either collection is empty (verified by unit test with fresh DB). Live flag = both docs present. Good.",
+    "market.py: gas EUR/Smc conversion uses the ARERA-provided 'smc' column when live; falls back to mwh*0.0107 when using FALLBACK. household_price for gas is formatted with comma decimal (verified).",
+    "server.py: /api/market/overview and /api/admin/market/refresh are correctly wired to get_current_user / get_admin_user; startup schedules refresh_loop as an asyncio task with 6h cadence — good.",
+    "market.tsx: uses react-query with queryKey ['market'] shared with Home mini-stats (instant tab transition, no flicker). Bars render 12 items; last bar highlighted with opacity=1 and bold label — good. testIDs (market-current, market-current-month, market-tab-luce, market-tab-gas, market-mtd, market-updated, market-insight-*) all present.",
+    "Server date is Sep 26 2026 — _last_complete_month returns 2026-08 as expected; live data from Energy-Charts + ARERA is being fetched and cached successfully."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_market.py"
+  ],
+  "success_rate": {"backend": "100% (33/33)", "frontend": "100%"},
+  "seed_data_creation": "One TEST_-prefixed customer created per module via /api/auth/register (existing convention). Temporary DB (TEST_market_fallback_*) is created and dropped inside the unit test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend regression + market feature is covered by /app/backend/tests (pytest, 33 tests, ~10s). Run with `EXPO_PUBLIC_BACKEND_URL=<preview> MONGO_URL=mongodb://localhost:27017 DB_NAME=test_database pytest /app/backend/tests -v`. Testable market UI testIDs on Home: home-market, home-market-luce, home-market-gas; on /market: market-current, market-current-month, market-tab-luce, market-tab-gas, market-mtd (Luce only), market-updated, market-insight-0..2. External sources (energy-charts.info, arera.it) are reachable from this container so live=true is expected; on outage the endpoint degrades gracefully to fallback (see TestMarketHelpers::test_market_overview_fallback_with_empty_db).",
+  "rca_of_issue": "N/A — no issues found in this iteration."
+}

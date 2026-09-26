@@ -11,17 +11,25 @@ import { H2, Body, Muted, Loader } from "@/src/components/ui";
 import { makeStyles, useTheme, spacing, radius, fonts, fontSize, ThemeColors } from "@/src/theme";
 
 type Block = {
-  current: number;
+  current: number | null;
+  current_month: string;
   unit: string;
-  previous: number;
-  delta_month_pct: number;
-  delta_year_pct: number;
+  previous: number | null;
+  delta_month_pct: number | null;
+  delta_year_pct: number | null;
   trend: string;
-  series: { month: string; value: number }[];
+  series: { month: string; key: string; value: number | null }[];
   household_unit: string;
-  household_price: string;
+  household_price: string | null;
+  month_to_date: { month: string; value: number } | null;
+  label: string;
   note: string;
+  source: string;
+  status: "live" | "fallback";
 };
+
+const fmt = (n: number | null | undefined, digits = 1) =>
+  n === null || n === undefined ? "—" : n.toLocaleString("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: digits });
 
 export default function Market() {
   const s = useStyles();
@@ -59,19 +67,25 @@ export default function Market() {
             <>
               {/* Headline card */}
               <View style={[s.headline, { backgroundColor: soft }]}>
-                <Muted style={{ color: colors.onSurfaceTertiary }}>{tab === "luce" ? "PUN · prezzo all'ingrosso" : "PSV · prezzo all'ingrosso"}</Muted>
+                <Muted style={{ color: colors.onSurfaceTertiary }}>{block.label}</Muted>
                 <View style={s.headlineRow}>
                   <Text style={[s.big, { color: colors.onSurface }]} testID="market-current">
-                    {block.current}
+                    {fmt(block.current)}
                   </Text>
                   <Text style={s.unit}>{block.unit}</Text>
+                  <Text style={s.monthTag} testID="market-current-month">{block.current_month}</Text>
                 </View>
+                {block.month_to_date ? (
+                  <Muted style={{ marginTop: spacing.xs }} testID="market-mtd">
+                    {block.month_to_date.month} in corso: {fmt(block.month_to_date.value)} {block.unit}
+                  </Muted>
+                ) : null}
                 <View style={s.chips}>
                   <DeltaChip label="vs mese prec." value={block.delta_month_pct} colors={colors} />
                   <DeltaChip label="vs anno prec." value={block.delta_year_pct} colors={colors} />
                 </View>
                 <View style={s.trendRow}>
-                  <TrendIcon value={block.delta_month_pct} colors={colors} size={18} />
+                  <TrendIcon value={block.delta_month_pct ?? 0} colors={colors} size={18} />
                   <Text style={[s.trendText, { color: colors.onSurface }]}>Tendenza: {block.trend}</Text>
                 </View>
               </View>
@@ -90,7 +104,8 @@ export default function Market() {
                 <View style={{ flex: 1 }}>
                   <Text style={s.infoTitle}>Per la tua casa</Text>
                   <Body style={{ marginTop: 2 }}>
-                    Prezzo energia tipico nelle offerte attuali: <Text style={{ fontFamily: fonts.semibold, color: colors.onSurface }}>{block.household_price} {block.household_unit}</Text>
+                    Costo della materia prima a {block.current_month}: <Text style={{ fontFamily: fonts.semibold, color: colors.onSurface }}>{block.household_price ?? "—"} {block.household_unit}</Text>
+                    {" "}(prima di quota fissa, trasporto, oneri e imposte)
                   </Body>
                   <Muted style={{ marginTop: spacing.sm }}>{block.note}</Muted>
                 </View>
@@ -114,9 +129,18 @@ export default function Market() {
 
           {/* Sources */}
           <View style={s.sources}>
-            <Muted style={{ fontSize: fontSize.sm }}>{data.disclaimer}</Muted>
-            <Muted style={{ fontSize: fontSize.sm, marginTop: spacing.xs }}>Fonti: {(data.sources as string[]).join(" · ")}</Muted>
-            <Muted style={{ fontSize: fontSize.sm, marginTop: spacing.xs }}>Aggiornato al {new Date(data.updated_at).toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric" })}</Muted>
+            <View style={s.liveRow}>
+              <View style={[s.liveDot, { backgroundColor: data.live ? colors.success : colors.warning }]} />
+              <Muted style={{ fontSize: fontSize.sm }} testID="market-updated">
+                {data.live ? "Dati reali aggiornati il " : "Dati indicativi (fonte non raggiungibile) · "}
+                {new Date(data.updated_at).toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric" })}
+                {" · si aggiornano automaticamente ogni mese"}
+              </Muted>
+            </View>
+            <Muted style={{ fontSize: fontSize.sm, marginTop: spacing.sm }}>{data.disclaimer}</Muted>
+            {(data.sources as string[]).map((src) => (
+              <Muted key={src} style={{ fontSize: fontSize.sm, marginTop: spacing.xs }}>Fonte: {src}</Muted>
+            ))}
           </View>
         </ScrollView>
       )}
@@ -141,7 +165,8 @@ function TrendIcon({ value, colors, size = 14 }: { value: number; colors: ThemeC
   return <Minus size={size} color={colors.muted} weight="bold" />;
 }
 
-export function DeltaChip({ label, value, colors }: { label: string; value: number; colors: ThemeColors }) {
+export function DeltaChip({ label, value, colors }: { label: string; value: number | null; colors: ThemeColors }) {
+  if (value === null) return null;
   const good = value < -0.5;
   const bad = value > 0.5;
   const fg = good ? colors.success : bad ? colors.error : colors.muted;
@@ -156,14 +181,15 @@ export function DeltaChip({ label, value, colors }: { label: string; value: numb
   );
 }
 
-function BarChart({ series, color, colors }: { series: { month: string; value: number }[]; color: string; colors: ThemeColors }) {
+function BarChart({ series, color, colors }: { series: { month: string; value: number | null }[]; color: string; colors: ThemeColors }) {
   const W = 320;
   const H = 170;
   const padL = 8;
   const padB = 26;
   const padT = 18;
-  const max = Math.max(...series.map((p) => p.value));
-  const min = Math.min(...series.map((p) => p.value));
+  const vals = series.map((p) => p.value).filter((v): v is number => v !== null);
+  const max = Math.max(...vals);
+  const min = Math.min(...vals);
   const range = Math.max(max - min, 1);
   const n = series.length;
   const slot = (W - padL * 2) / n;
@@ -174,16 +200,23 @@ function BarChart({ series, color, colors }: { series: { month: string; value: n
     <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
       <Line x1={padL} y1={H - padB} x2={W - padL} y2={H - padB} stroke={colors.border} strokeWidth={1} />
       {series.map((p, i) => {
-        const h = 24 + ((p.value - min) / range) * (chartH - 24);
         const x = padL + i * slot + (slot - barW) / 2;
-        const y = H - padB - h;
         const isLast = i === n - 1;
+        if (p.value === null) {
+          return (
+            <SvgText key={p.month} x={x + barW / 2} y={H - 8} fontSize={9} fill={colors.muted} textAnchor="middle">
+              {p.month}
+            </SvgText>
+          );
+        }
+        const h = 24 + ((p.value - min) / range) * (chartH - 24);
+        const y = H - padB - h;
         return (
           <React.Fragment key={p.month}>
             <Rect x={x} y={y} width={barW} height={h} rx={5} fill={color} opacity={isLast ? 1 : 0.45} />
             {isLast || i % 2 === 0 ? (
               <SvgText x={x + barW / 2} y={y - 5} fontSize={9} fill={colors.onSurface} textAnchor="middle" fontWeight={isLast ? "700" : "400"}>
-                {p.value}
+                {Math.round(p.value)}
               </SvgText>
             ) : null}
             {i % 2 === 1 || isLast ? (
@@ -206,6 +239,9 @@ const useStyles = makeStyles((colors) => ({
   headlineRow: { flexDirection: "row", alignItems: "flex-end", gap: spacing.sm, marginTop: spacing.xs },
   big: { fontFamily: fonts.bold, fontSize: fontSize["4xl"], lineHeight: 46 },
   unit: { fontFamily: fonts.medium, fontSize: fontSize.lg, color: colors.onSurfaceTertiary, marginBottom: 8 },
+  monthTag: { fontFamily: fonts.medium, fontSize: fontSize.sm, color: colors.onSurfaceTertiary, marginBottom: 10, marginLeft: spacing.xs, backgroundColor: colors.surfaceSecondary, borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+  liveRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
+  liveDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.md },
   trendRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.md },
   trendText: { fontFamily: fonts.medium, fontSize: fontSize.base },
