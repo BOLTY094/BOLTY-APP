@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 10 — validated the new /api/admin panel end-to-end (auth + full flow + regression + admin UI). New pytest module /app/backend/tests/test_admin_panel.py (34 tests, 1 real /tmp/duferco.pdf upload) — ALL PASS. SECURITY: every /api/admin/* route (stats, bills/search, users, users/{id}, contacts, contacts/{bill_id}/status PUT, referrals, notifications GET+read PUT, audit, news/refresh) returns 401 without token and 403 with mario's customer token; 200 with admin token. Customer cross-access: `GET /api/bills/{other_user_bill_id}` and `GET /api/files/{other storage_path}` with mario's Bearer both return 403; `GET /api/bills` for mario returns only his own user_id. FULL FLOW: registered a fresh TEST_admin_flow_<ts>@esempio.it, uploaded /tmp/duferco.pdf (application/pdf, category luce) — response.extracted = {fornitore:'Duferco Energia SpA', intestatario:'VERBA GROUP SRLS', tipo_intestatario:'azienda', codice_fiscale:'04137230928', partita_iva:'04137230928'}, analysis=None. `GET /api/files/{storage_path}` with admin Bearer returns byte-identical PDF (sha256 match) and content-type application/pdf; admin_audit gains an 'open_file' row for the bill. `POST /api/bills/{id}/contact` with email/phone/consent -> 200 and contact_request.status='nuovo' (matches new default). `GET /admin/contacts?status=nuovo` includes the bill with contact_email='temp@esempio.it' and contact_phone='+393330000000'. `PUT /admin/contacts/{bill_id}/status {status:'contattato'}` -> 200 and audit row 'contact_status'. `PUT` with invalid status -> 422. `GET /admin/stats` returns bills_total/contacts_total/contacts_with_email/phone/users_total consistently >= expected, latest_bills[0] is the new bill, latest_contacts contains it. `GET /admin/notifications?limit=50` contains 2 items (kinds 'bolletta' + 'contatto') carrying the bill_id; `PUT /admin/notifications/read?notification_id=...` returns {updated:>=1}. `GET /admin/bills/search?q=VERBA` and `?q=04137230928` both include the bill; `filter=contattati` includes it after status change while `filter=da_contattare` excludes it; `date_from=today` includes it. `GET /admin/users?q=<temp email>` returns the temp user with bills_count=1; `GET /admin/users/{id}` timeline contains registrazione + bolletta + contatto types. Referral: registered a second temp user with the first temp user's referral code; `GET /admin/referrals` contains a row where referrer.email=first, referred.user_id=second, status='registrato', code matches. REGRESSION: full pytest suite under /app/backend/tests with EXPO_PUBLIC_BACKEND_URL exported and SKIP_REAL_EMAIL=1, excluding real-upload duplicates -> 123 passed / 0 failed / 0 errors. Old `GET /api/admin/dashboard` is still present and returns 200 with `stats` (confirmed). FRONTEND (admin@bolty.it/Bolty!Admin2026, 1100x800 desktop): admin-sidebar renders with exactly 10 admin-menu-* items; dashboard shows stat-users=134, stat-bills=60, stat-bills-today=50, stat-contacts=6, stat-referrals=15 (all cards present); 'Ultime bollette ricevute' lists 12 admin-bill-* rows including 'VERBA GROUP SRLS / Duferco Energia SpA / duferco.pdf' with file icon. Navigating to Bollette -> admin-search input present; Clienti -> 134 admin-user-* rows; Richieste di contatto -> loads with contatto text; Referral -> loads; News -> admin-news-meta present; Notifiche -> loads; Impostazioni -> 12 audit-row entries visible + admin-logout button present. Customer redirect: unauthenticated navigation to /bollette correctly redirects to /login (auth guard in place). Real side-effects this iteration: 1 real /api/upload (duferco.pdf) triggering 1 real admin email + 1 real contact-request email to amministrazioneverbagroup@gmail.com — within the review's 1-upload budget.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin_panel.py",
+    "/app/test_reports/pytest/admin_panel.xml",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/admin_panel.py — every route depends on get_admin_user which returns 401 (no token) or 403 (not admin) before touching the DB. Contact status enum is pattern-validated in Pydantic so bad values return 422 (verified). Audit rows are written after each write (`contact_status`, `view_user`) and before returning.",
+    "backend/server.py:944-965 /api/files/{path} — customer with another user's storage_path -> 403; admin -> 200 with an `open_file` audit row (verified via /admin/audit).",
+    "backend/server.py:874-929 /api/bills/{id}/contact — new bills now get contact_request.status='nuovo' (matches the review request). Notification 'Nuova richiesta di contatto' is inserted into admin_notifications with bill_id + kind='contatto'.",
+    "backend/server.py:772-777 upload creates admin_notifications kind='bolletta' with the bill_id, verified via /admin/notifications.",
+    "backend/admin_panel.py:71-88 bills_search — filter/date_from/date_to/q compose correctly with the live filter; verified with filter=contattati, filter=da_contattare, q by intestatario, q by P.IVA, date_from=today.",
+    "backend/admin_panel.py:176-191 referrals — status derivation: 'offerta_attivata' if rewards row exists, else 'bolletta_caricata' if any bill, else 'registrato'. New referred user without bill correctly shown as 'registrato'.",
+    "frontend/_layout.tsx — sidebar/topbar branch on width>=900 verified live at 1100x800; testIDs present for admin-sidebar, admin-topbar, admin-menu-<label>, all 10 entries. admin-logout also verified in Impostazioni."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_admin_panel.py (new — 34 tests covering security matrix + customer cross-access + upload flow + admin views + referrals + old dashboard)"
+  ],
+  "success_rate": {
+    "backend": "100% (34/34 new admin_panel; 123/123 regression, excluding duplicated real-upload cases)",
+    "frontend": "100% desktop admin panel (sidebar+stats+bills+search+users+contacts+news+notifiche+impostazioni+audit+logout all verified); mobile topbar not visually re-verified in this run (code-verified in _layout.tsx: `wide = width >= 900` branch) — iteration 9 covered mobile admin bill detail."
+  },
+  "seed_data_creation": "One extra Duferco bill uploaded under a fresh TEST_admin_flow_<ts>@esempio.it customer; contact_request set to 'contattato' by the test. Two TEST_-prefixed temp users were created (one plain, one referred). They are isolated and safe to leave in DB.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Admin panel is fully covered by /app/backend/tests/test_admin_panel.py. Run with EXPO_PUBLIC_BACKEND_URL exported. Each execution triggers 1 real admin email (Duferco upload) + 1 real contact-request email — budget accordingly. To run only auth/security without any email/LLM cost, use: pytest tests/test_admin_panel.py::TestAdminAuthorization tests/test_admin_panel.py::TestCustomerCrossAccess tests/test_admin_panel.py::TestOldDashboardStillExists (23 tests, no uploads). The old /api/admin/dashboard still exists (regression tested); contact initial status is now 'nuovo' — any downstream test that expects 'da_contattare' at creation needs updating.",
+  "rca_of_issue": "No bugs found. Every review-request assertion passed."
+}

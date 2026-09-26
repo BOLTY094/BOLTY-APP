@@ -30,6 +30,7 @@ import market
 import legal
 import extraction
 import news
+import admin_panel
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -430,6 +431,14 @@ async def send_email(*, to: str, subject: str, html: str, attachments: Optional[
         return None
 
 
+async def notify_admin_panel(kind: str, title: str, message: str, bill_id: Optional[str] = None, user_id: Optional[str] = None, extra: Optional[dict] = None):
+    """In-app notification for the admin panel (separate from customer notifications)."""
+    await db.admin_notifications.insert_one({
+        "notification_id": make_id("antf"), "kind": kind, "title": title, "message": message,
+        "bill_id": bill_id, "user_id": user_id, "extra": extra or {}, "read": False, "created_at": now_utc().isoformat(),
+    })
+
+
 async def notify(user_id: str, title: str, message_html: str, subject: str):
     """Create an in-app notification and send an email (best effort)."""
     user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
@@ -760,6 +769,12 @@ async def upload_bill(
         "Bolletta ricevuta — BOLTY",
     )
     await notify_admin_new_bill(request, bill, content)
+    await notify_admin_panel(
+        "bolletta", "Nuova bolletta da analizzare",
+        f"{user.get('name') or 'Cliente'} · {extracted.get('fornitore') or 'Fornitore non rilevato'} · {category}",
+        bill_id=bill["bill_id"], user_id=user["user_id"],
+        extra={"customer": user.get("name"), "fornitore": extracted.get("fornitore"), "category": category, "file_name": file.filename},
+    )
     return clean(bill)
 
 
@@ -872,7 +887,7 @@ async def bill_contact_request(bill_id: str, inp: ContactRequestInput, request: 
         raise HTTPException(status_code=422, detail="Indirizzo email non valido")
     if phone and not PHONE_RE.match(phone):
         raise HTTPException(status_code=422, detail="Numero di telefono non valido")
-    contact = {"email": email, "phone": phone, "consent_at": now_utc().isoformat(), "status": "da_contattare"}
+    contact = {"email": email, "phone": phone, "consent_at": now_utc().isoformat(), "status": "nuovo"}
     await db.bills.update_one({"bill_id": bill_id}, {"$set": {"contact_request": contact, "updated_at": now_utc().isoformat()}})
 
     ex = bill.get("extracted") or {}
@@ -899,6 +914,12 @@ async def bill_contact_request(bill_id: str, inp: ContactRequestInput, request: 
         ),
     )
     logger.info(f"Contact request email {'sent ' + email_id if email_id else 'FAILED'} for {bill_id}")
+    await notify_admin_panel(
+        "contatto", "Nuova richiesta di contatto",
+        f"{user.get('name') or 'Cliente'} · {email or ''} {phone or ''}".strip(),
+        bill_id=bill_id, user_id=user["user_id"],
+        extra={"customer": user.get("name"), "email": email, "phone": phone, "fornitore": ex.get("fornitore")},
+    )
     await db.notifications.insert_one({
         "notification_id": make_id("ntf"), "user_id": user["user_id"], "title": "Richiesta di contatto inviata",
         "message": "Un nostro consulente ti contatterà per spiegarti la soluzione più adatta alle tue esigenze.",
@@ -934,6 +955,8 @@ async def get_file(path: str, authorization: Optional[str] = Header(None), token
             raise HTTPException(status_code=401, detail="Non autenticato")
         if bill["user_id"] != user["user_id"] and user.get("role") != "admin":
             raise HTTPException(status_code=403, detail="Non autorizzato")
+        if user.get("role") == "admin":
+            await db.admin_audit.insert_one({"audit_id": make_id("aud"), "admin_id": user["user_id"], "admin_email": user.get("email"), "action": "open_file", "target": bill["bill_id"], "details": {"path": path}, "created_at": now_utc().isoformat()})
     try:
         content, content_type = await run_in_threadpool(get_object, path)
     except Exception as e:
@@ -1302,6 +1325,7 @@ async def root():
     return {"message": "BOLTY API"}
 
 
+api_router.include_router(admin_panel.build_router(db, get_admin_user, now_utc, make_id))
 app.include_router(api_router)
 
 app.add_middleware(

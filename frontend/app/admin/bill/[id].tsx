@@ -9,6 +9,7 @@ import { TrendUp } from "phosphor-react-native";
 import { api } from "@/src/api";
 import { useToast } from "@/src/toast";
 import { ScreenHeader } from "@/src/components/screen-header";
+import { openOriginalFile, fmtDateTime } from "@/src/components/admin-ui";
 import { CategoryIcon } from "@/src/components/category-icon";
 import { H2, Muted, Button, TextField, Badge, Loader, eur, statusMeta } from "@/src/components/ui";
 import { makeStyles, useTheme, spacing, radius, fonts, fontSize, categoryColors } from "@/src/theme";
@@ -110,6 +111,14 @@ export default function AdminBillDetail() {
         </View>
 
         <H2 style={{ marginTop: spacing.lg, marginBottom: spacing.md }}>Dati della bolletta</H2>
+        <Button
+          title={`Apri il file originale${bill.file_name ? ` · ${bill.file_name}` : ""}`}
+          variant="secondary"
+          onPress={() => openOriginalFile(bill.storage_path).catch(() => show("Impossibile aprire il file", "error"))}
+          style={{ marginBottom: spacing.md }}
+          testID="admin-open-file"
+        />
+        <Muted style={{ marginBottom: spacing.sm }}>Caricata il {fmtDateTime(bill.created_at)} da {bill.user_name || "cliente"}{bill.user_email ? ` (${bill.user_email})` : ""}</Muted>
         <View style={s.dataCard}>
           {DATA_FIELDS.map((f, i) => (
             <View key={f.key} style={[s.dataRow, i !== DATA_FIELDS.length - 1 && s.border]}>
