@@ -729,6 +729,49 @@ async def apple_auth(inp: AppleInput):
 # ---------------------------------------------------------------------------
 # Bills
 # ---------------------------------------------------------------------------
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_MB", "20")) * 1024 * 1024
+UPLOADS_PER_HOUR = int(os.environ.get("UPLOADS_PER_HOUR", "10"))
+UPLOADS_PER_DAY = int(os.environ.get("UPLOADS_PER_DAY", "30"))
+# Only real bill documents: PDF or photos. Anything else is rejected before storage and AI extraction.
+ALLOWED_UPLOAD_TYPES = {
+    "application/pdf": "pdf",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/heic": "heic",
+    "image/heif": "heif",
+}
+UPLOAD_MAGIC = (
+    (b"%PDF", "application/pdf"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"RIFF", "image/webp"),
+)
+
+
+def sniff_upload_type(content: bytes, declared: str) -> Optional[str]:
+    """Return the validated content type, or None if the bytes don't look like an allowed document."""
+    declared = (declared or "").split(";")[0].strip().lower()
+    for magic, ctype in UPLOAD_MAGIC:
+        if content.startswith(magic):
+            return ctype
+    # HEIC/HEIF: ISO BMFF container with 'ftyp' box at offset 4
+    if len(content) > 12 and content[4:8] == b"ftyp" and content[8:12] in (b"heic", b"heix", b"hevc", b"heif", b"mif1", b"msf1"):
+        return "image/heic" if declared != "image/heif" else "image/heif"
+    return None
+
+
+async def enforce_upload_quota(user_id: str) -> None:
+    now = now_utc()
+    hour_ago = (now - timedelta(hours=1)).isoformat()
+    day_ago = (now - timedelta(days=1)).isoformat()
+    if await db.bills.count_documents({"user_id": user_id, "created_at": {"$gte": hour_ago}}) >= UPLOADS_PER_HOUR:
+        raise HTTPException(status_code=429, detail=f"Hai raggiunto il limite di {UPLOADS_PER_HOUR} caricamenti in un'ora. Riprova più tardi.")
+    if await db.bills.count_documents({"user_id": user_id, "created_at": {"$gte": day_ago}}) >= UPLOADS_PER_DAY:
+        raise HTTPException(status_code=429, detail=f"Hai raggiunto il limite di {UPLOADS_PER_DAY} caricamenti al giorno. Riprova domani.")
+
+
 @api_router.post("/upload")
 async def upload_bill(
     request: Request,
@@ -738,10 +781,30 @@ async def upload_bill(
 ):
     if category not in CATEGORIES:
         raise HTTPException(status_code=400, detail="Categoria non valida")
-    content = await file.read()
-    ext = (file.filename or "file").split(".")[-1].lower()
+    declared_type = (file.content_type or "").split(";")[0].strip().lower()
+    if declared_type not in ALLOWED_UPLOAD_TYPES:
+        raise HTTPException(status_code=415, detail="Formato non supportato: carica un PDF o una foto (JPG, PNG, HEIC).")
+    await enforce_upload_quota(user["user_id"])
+
+    # Read in chunks and stop as soon as the size cap is exceeded (never buffer unbounded input).
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail=f"File troppo grande: il limite è {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.")
+        chunks.append(chunk)
+    content = b"".join(chunks)
+    if not content:
+        raise HTTPException(status_code=400, detail="Il file è vuoto")
+    content_type = sniff_upload_type(content, declared_type)
+    if content_type is None:
+        raise HTTPException(status_code=415, detail="Il file non è un PDF o un'immagine valida.")
+    ext = ALLOWED_UPLOAD_TYPES[content_type]
     path = f"{APP_NAME}/uploads/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
-    content_type = file.content_type or "application/octet-stream"
     sha256 = hashlib.sha256(content).hexdigest()
     try:
         await run_in_threadpool(put_object, path, content, content_type)

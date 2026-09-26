@@ -101,3 +101,7 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+## Iteration 13 — Upload hardening (Security Audit SEC-001)
+- backend/server.py `POST /api/upload`: declared content-type allowlist (pdf/jpeg/png/webp/heic) -> 415; per-user quota via db.bills created_at (UPLOADS_PER_HOUR=10, UPLOADS_PER_DAY=30) -> 429 BEFORE reading the body; chunked read with MAX_UPLOAD_MB=20 -> 413; empty file -> 400; magic-byte sniff (`sniff_upload_type`) -> 415 if bytes are not PDF/JPEG/PNG/WEBP/HEIC; storage extension now derived from validated type, not filename. Rejections happen before Object Storage, LLM extraction and emails.
+- Manually verified: text/plain -> 415, fake pdf bytes -> 415, 21MB -> 413.
+- needs_retesting: true (backend only). Quota (429) can be tested by inserting >=10 bill docs with recent created_at for a temp user directly in Mongo (db `bolty`? check MONGO_URL/DB_NAME in backend/.env) or by registering a temp user and mocking. Do NOT upload real PDFs more than 1-2 times (LLM credits + real admin email).
