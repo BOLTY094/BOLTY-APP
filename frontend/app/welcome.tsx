@@ -14,10 +14,10 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useAuth } from "@/src/auth-context";
-import { BoltyBolt } from "@/src/components/logo";
+import { BoltyBolt, BoltyBoltOpen } from "@/src/components/logo";
 import { makeStyles, useTheme, spacing, fonts, fontSize } from "@/src/theme";
 
-const TOTAL_MS = 2400;
+const TOTAL_MS = 3000;
 
 // Animated bolt mascot shown right after login, then hands off to the home.
 export default function Welcome() {
@@ -30,6 +30,7 @@ export default function Welcome() {
   const rotate = useSharedValue(-25);
   const glow = useSharedValue(0.6);
   const glowOpacity = useSharedValue(0);
+  const wink = useSharedValue(0); // 0 = eyes open, 1 = winking frame visible
   const textY = useSharedValue(16);
   const textOpacity = useSharedValue(0);
   const screenOpacity = useSharedValue(1);
@@ -47,6 +48,12 @@ export default function Welcome() {
       withTiming(-6, { duration: 180 }),
       withTiming(5, { duration: 160 }),
       withTiming(0, { duration: 200 }),
+    );
+    // The wink: eyes open -> quick wink -> open -> wink again and hold (like the logo).
+    wink.value = withSequence(
+      withDelay(700, withTiming(1, { duration: 90 })),
+      withDelay(260, withTiming(0, { duration: 110 })),
+      withDelay(650, withTiming(1, { duration: 90 })),
     );
     // Soft yellow halo pulsing behind the bolt.
     glowOpacity.value = withTiming(1, { duration: 400 });
@@ -72,6 +79,7 @@ export default function Welcome() {
     opacity: glowOpacity.value,
     transform: [{ scale: glow.value }],
   }));
+  const winkStyle = useAnimatedStyle(() => ({ opacity: wink.value }));
   const textStyle = useAnimatedStyle(() => ({
     opacity: textOpacity.value,
     transform: [{ translateY: textY.value }],
@@ -84,8 +92,11 @@ export default function Welcome() {
     <Animated.View style={[s.screen, screenStyle]} testID="welcome-screen">
       <View style={s.center}>
         <Animated.View style={[s.glow, { backgroundColor: colors.accentSoft }, glowStyle]} />
-        <Animated.View style={boltStyle}>
-          <BoltyBolt size={190} />
+        <Animated.View style={boltStyle} testID="welcome-bolt">
+          <BoltyBoltOpen size={190} />
+          <Animated.View style={[s.winkLayer, winkStyle]}>
+            <BoltyBolt size={190} />
+          </Animated.View>
         </Animated.View>
       </View>
       <Animated.View style={[s.textWrap, textStyle]}>
@@ -102,6 +113,7 @@ const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
   center: { width: 260, height: 260, alignItems: "center", justifyContent: "center" },
   glow: { position: "absolute", width: 220, height: 220, borderRadius: 110 },
+  winkLayer: { position: "absolute", left: 0, top: 0 },
   textWrap: { alignItems: "center", marginTop: spacing.lg },
   hello: { fontFamily: fonts.bold, fontSize: fontSize["3xl"], color: colors.brand, letterSpacing: -0.5 },
   sub: { fontFamily: fonts.medium, fontSize: fontSize.lg, color: colors.muted, marginTop: spacing.sm },

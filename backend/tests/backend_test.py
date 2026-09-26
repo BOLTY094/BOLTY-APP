@@ -91,7 +91,10 @@ class TestFlow:
         bill = r.json()
         assert bill["category"] == "luce"
         assert bill["status"] == "nuova"
-        assert "analysis" in bill and bill["analysis"]["spesa_attuale_mese"] > 0
+        # New behaviour: analysis is None and extracted has only 5 keys (all can be None)
+        assert bill.get("analysis") is None
+        assert set(bill["extracted"].keys()) == {"fornitore", "intestatario", "tipo_intestatario", "codice_fiscale", "partita_iva"}
+        assert "extraction_meta" in bill
         bill_id = bill["bill_id"]
 
         # List bills
@@ -102,11 +105,18 @@ class TestFlow:
         r = http.get(f"{API}/bills/{bill_id}", headers=_hdr(token), timeout=30)
         assert r.status_code == 200
 
-        # Confirm bill (correct extracted data)
-        payload = {"extracted": {**bill["extracted"], "totale": 120.0, "periodo_fatturazione": "Bimestrale"}}
+        # Confirm bill: new payload only has the 5 allowed keys, old fields (totale/periodo_fatturazione) are ignored by Pydantic
+        payload = {"extracted": {
+            "fornitore": "Test Provider SpA", "intestatario": "Mario Rossi",
+            "tipo_intestatario": "persona", "codice_fiscale": None, "partita_iva": None,
+            "totale": 120.0, "periodo_fatturazione": "Bimestrale",  # extra fields should be dropped
+        }}
         r = http.put(f"{API}/bills/{bill_id}/confirm", headers=_hdr(token), json=payload, timeout=30)
         assert r.status_code == 200
-        assert r.json()["extracted"]["totale"] == 120.0
+        confirmed = r.json()
+        assert confirmed["extracted"].get("fornitore") == "Test Provider SpA"
+        assert "totale" not in confirmed["extracted"]
+        assert confirmed["extraction_meta"].get("confirmed_by_user") is True
 
         # Admin dashboard
         r = http.get(f"{API}/admin/dashboard", headers=_hdr(admin_token), timeout=30)

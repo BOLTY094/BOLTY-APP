@@ -28,6 +28,8 @@ from urllib.parse import urlparse
 
 import market
 import legal
+import extraction
+import news
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -476,16 +478,18 @@ CATEGORIES = {"luce", "gas", "telefonia"}
 
 
 class ExtractedData(BaseModel):
-    fornitore: Optional[str] = None
-    tipo_contratto: Optional[str] = None
-    consumi: Optional[str] = None
-    periodo_fatturazione: Optional[str] = None
-    prezzo: Optional[float] = None
-    quota_fissa: Optional[float] = None
-    trasporto: Optional[float] = None
-    imposte: Optional[float] = None
-    totale: Optional[float] = None
-    altre_voci: Optional[float] = None
+    """Only data that can be read on the document. No amounts, no estimates."""
+    fornitore: Optional[str] = Field(default=None, max_length=120)
+    intestatario: Optional[str] = Field(default=None, max_length=120)
+    tipo_intestatario: Optional[str] = Field(default=None, pattern="^(persona|azienda)$")
+    codice_fiscale: Optional[str] = Field(default=None, max_length=16)
+    partita_iva: Optional[str] = Field(default=None, max_length=11)
+
+
+class ContactRequestInput(BaseModel):
+    email: Optional[str] = Field(default=None, max_length=120)
+    phone: Optional[str] = Field(default=None, max_length=30)
+    consent: bool
 
 
 class ConfirmBillInput(BaseModel):
@@ -699,48 +703,6 @@ async def apple_auth(inp: AppleInput):
 # ---------------------------------------------------------------------------
 # Bills
 # ---------------------------------------------------------------------------
-def simulate_extraction(category: str) -> dict:
-    """Placeholder extraction (manual/simulated). Returns plausible editable data."""
-    base = {
-        "luce": {"fornitore": "Enel Energia", "tipo_contratto": "Mercato libero",
-                 "consumi": "2700 kWh/anno", "periodo_fatturazione": "Bimestrale",
-                 "prezzo": 0.14, "quota_fissa": 12.0, "trasporto": 18.5, "imposte": 9.2,
-                 "totale": 95.0, "altre_voci": 3.0},
-        "gas": {"fornitore": "Eni Plenitude", "tipo_contratto": "Mercato libero",
-                "consumi": "1100 Smc/anno", "periodo_fatturazione": "Bimestrale",
-                "prezzo": 0.85, "quota_fissa": 10.0, "trasporto": 22.0, "imposte": 14.0,
-                "totale": 110.0, "altre_voci": 2.5},
-        "telefonia": {"fornitore": "TIM", "tipo_contratto": "Fibra + Mobile",
-                      "consumi": "Illimitato", "periodo_fatturazione": "Mensile",
-                      "prezzo": 0.0, "quota_fissa": 29.9, "trasporto": 0.0, "imposte": 3.0,
-                      "totale": 32.9, "altre_voci": 0.0},
-    }
-    return base.get(category, base["luce"])
-
-
-def compute_analysis(category: str, extracted: dict) -> dict:
-    totale = float(extracted.get("totale") or 0)
-    periodo = (extracted.get("periodo_fatturazione") or "").lower()
-    if "mens" in periodo:
-        months = 1
-    elif "trime" in periodo:
-        months = 3
-    elif "annu" in periodo:
-        months = 12
-    else:
-        months = 2  # bimestrale default
-    monthly = round(totale / months, 2) if months else totale
-    annual = round(monthly * 12, 2)
-    est_saving = round(annual * 0.18, 2)
-    return {
-        "spesa_attuale_mese": monthly,
-        "spesa_attuale_anno": annual,
-        "consumo_annuo_stimato": extracted.get("consumi"),
-        "costo_medio_mese": monthly,
-        "risparmio_possibile_anno": est_saving,
-    }
-
-
 @api_router.post("/upload")
 async def upload_bill(
     request: Request,
@@ -765,8 +727,11 @@ async def upload_bill(
         logger.error(f"Upload failed: {e}")
         raise HTTPException(status_code=502, detail="Caricamento file non riuscito")
 
-    extracted = simulate_extraction(category)
-    analysis = compute_analysis(category, extracted)
+    # Real extraction from the uploaded document only (supplier, holder, CF, P.IVA). Never estimated.
+    result = await extraction.extract_bill_data(content, content_type, file.filename or "")
+    extraction_meta = result.pop("_meta")
+    extracted = result
+    analysis = None
     bill = {
         "bill_id": make_id("bill"),
         "user_id": user["user_id"],
@@ -780,7 +745,9 @@ async def upload_bill(
         "file_sha256": sha256,
         "status": "nuova",
         "extracted": extracted,
+        "extraction_meta": extraction_meta,
         "analysis": analysis,
+        "contact_request": None,
         "created_at": now_utc().isoformat(),
         "updated_at": now_utc().isoformat(),
         "deleted_at": None,
@@ -871,17 +838,72 @@ async def confirm_bill(bill_id: str, inp: ConfirmBillInput, user: dict = Depends
     bill = await db.bills.find_one({"bill_id": bill_id, "deleted_at": None})
     if not bill or bill["user_id"] != user["user_id"]:
         raise HTTPException(status_code=404, detail="Bolletta non trovata")
-    extracted = inp.extracted.model_dump()
-    analysis = compute_analysis(bill["category"], extracted)
+    extracted = {k: (v.strip() if isinstance(v, str) and v.strip() else None) for k, v in inp.extracted.model_dump().items()}
     await db.bills.update_one(
         {"bill_id": bill_id},
-        {"$set": {"extracted": extracted, "analysis": analysis, "updated_at": now_utc().isoformat()}},
+        {"$set": {"extracted": extracted, "extraction_meta.confirmed_by_user": True, "updated_at": now_utc().isoformat()}},
     )
     await notify(
-        user["user_id"], "Analisi completata",
-        f"Abbiamo analizzato la tua bolletta. Spesa attuale stimata: <strong>{analysis['spesa_attuale_mese']} €/mese</strong>. Ti proporremo presto l'offerta migliore.",
-        "Analisi completata — BOLTY",
+        user["user_id"], "Dati confermati",
+        "Grazie! Abbiamo registrato i dati della tua bolletta. Un consulente la analizzerà e ti proporremo presto l'offerta migliore.",
+        "Dati confermati — BOLTY",
     )
+    updated = await db.bills.find_one({"bill_id": bill_id}, {"_id": 0})
+    return updated
+
+
+EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+PHONE_RE = re.compile(r"^\+?[0-9]{6,15}$")
+
+
+@api_router.post("/bills/{bill_id}/contact")
+async def bill_contact_request(bill_id: str, inp: ContactRequestInput, request: Request, user: dict = Depends(get_current_user)):
+    """Customer voluntarily leaves contacts so a consultant can call back about this bill's offer."""
+    bill = await db.bills.find_one({"bill_id": bill_id, "deleted_at": None})
+    if not bill or bill["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=404, detail="Bolletta non trovata")
+    if not inp.consent:
+        raise HTTPException(status_code=422, detail="È necessario il consenso al trattamento dei dati per essere ricontattato")
+    email = (inp.email or "").strip().lower() or None
+    phone = re.sub(r"[\s().-]", "", inp.phone or "") or None
+    if not email and not phone:
+        raise HTTPException(status_code=422, detail="Inserisci almeno un recapito (email o telefono)")
+    if email and not EMAIL_RE.match(email):
+        raise HTTPException(status_code=422, detail="Indirizzo email non valido")
+    if phone and not PHONE_RE.match(phone):
+        raise HTTPException(status_code=422, detail="Numero di telefono non valido")
+    contact = {"email": email, "phone": phone, "consent_at": now_utc().isoformat(), "status": "da_contattare"}
+    await db.bills.update_one({"bill_id": bill_id}, {"$set": {"contact_request": contact, "updated_at": now_utc().isoformat()}})
+
+    ex = bill.get("extracted") or {}
+    rows = "".join(
+        f"<tr><td style=\"padding:4px 8px;color:#6B7185\">{escape(k)}</td><td style=\"padding:4px 8px\"><strong>{escape(str(v))}</strong></td></tr>"
+        for k, v in [
+            ("Cliente", user.get("name") or "—"), ("Email account", user.get("email") or "—"),
+            ("Email indicata", email or "—"), ("Telefono indicato", phone or "—"),
+            ("Categoria", bill["category"]), ("Fornitore", ex.get("fornitore") or "Non rilevato"),
+            ("Intestatario", ex.get("intestatario") or "Non rilevato"), ("Codice fiscale", ex.get("codice_fiscale") or "Non rilevato"),
+            ("Partita IVA", ex.get("partita_iva") or "Non rilevato"), ("File", bill.get("file_name") or "—"), ("ID bolletta", bill["bill_id"]),
+        ]
+    )
+    link = f"{public_base_url(request)}/api/files/{bill['storage_path']}?token={create_file_token(bill['storage_path'])}"
+    email_id = await send_email(
+        to=ADMIN_NOTIFY_EMAIL,
+        subject=f"Richiesta di contatto da {user.get('name') or 'cliente'} — BOLTY",
+        html=_email_template(
+            "Un cliente vuole essere ricontattato",
+            f"<p>Il cliente ha lasciato volontariamente i propri recapiti per ricevere informazioni sull'offerta relativa alla sua bolletta.</p>"
+            f"<table style=\"border-collapse:collapse;font-size:14px\">{rows}</table>"
+            f"<p style=\"margin-top:12px\"><a href=\"{link}\" style=\"display:inline-block;background:#16213E;color:#ffffff;padding:10px 16px;border-radius:10px;text-decoration:none;font-weight:600\">Apri la bolletta</a></p>"
+            f"<p style=\"font-size:12px;color:#6B7185\">Consenso al trattamento dei dati prestato il {contact['consent_at'][:10]}.</p>",
+        ),
+    )
+    logger.info(f"Contact request email {'sent ' + email_id if email_id else 'FAILED'} for {bill_id}")
+    await db.notifications.insert_one({
+        "notification_id": make_id("ntf"), "user_id": user["user_id"], "title": "Richiesta di contatto inviata",
+        "message": "Un nostro consulente ti contatterà per spiegarti la soluzione più adatta alle tue esigenze.",
+        "read": False, "created_at": now_utc().isoformat(),
+    })
     updated = await db.bills.find_one({"bill_id": bill_id}, {"_id": 0})
     return updated
 
@@ -1249,6 +1271,19 @@ async def legal_support():
 
 
 # ---------------------------------------------------------------------------
+# NEWS (real articles from RSS feeds, refreshed every 3 days — see news.py)
+# ---------------------------------------------------------------------------
+@api_router.get("/news")
+async def get_news(limit: int = Query(30, ge=1, le=100), before: Optional[str] = None, user: dict = Depends(get_current_user)):
+    return await news.list_news(db, limit=limit, before=before)
+
+
+@api_router.post("/admin/news/refresh")
+async def admin_news_refresh(admin: dict = Depends(get_admin_user)):
+    return await news.refresh_news(db, force=True)
+
+
+# ---------------------------------------------------------------------------
 # MARKET OVERVIEW (live public sources, cached in Mongo — see market.py)
 # ---------------------------------------------------------------------------
 @api_router.get("/market/overview")
@@ -1298,6 +1333,7 @@ async def startup():
 
     # Market prices: refresh from public sources in background (daily check, monthly data)
     asyncio.create_task(market.refresh_loop(db))
+    asyncio.create_task(news.refresh_loop(db))
 
     try:
         admin = await db.users.find_one({"email": ADMIN_EMAIL.lower()})

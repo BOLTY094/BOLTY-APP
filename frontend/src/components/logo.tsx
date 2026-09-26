@@ -17,6 +17,18 @@ export function BoltyLogo({ width = 200, height = 200 }: { width?: number; heigh
   );
 }
 
+// Bolt mascot with both eyes open — base frame of the wink animation.
+export function BoltyBoltOpen({ size = 160 }: { size?: number }) {
+  return (
+    <Image
+      source={require("@/assets/images/bolty-bolt-open.png")}
+      style={{ width: size, height: size * 0.92 }}
+      contentFit="contain"
+      testID="bolty-bolt-open"
+    />
+  );
+}
+
 // Bolt mascot only (winking smile), used for the welcome animation.
 export function BoltyBolt({ size = 160 }: { size?: number }) {
   return (

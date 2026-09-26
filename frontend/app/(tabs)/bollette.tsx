@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus } from "phosphor-react-native";
 
 import { api } from "@/src/api";
-import { H1, Muted, Body, Badge, EmptyState, Loader, eur, statusMeta } from "@/src/components/ui";
+import { H1, Muted, Body, Badge, EmptyState, Loader, statusMeta } from "@/src/components/ui";
 import { CategoryIcon } from "@/src/components/category-icon";
 import { makeStyles, useTheme, spacing, radius, fonts, fontSize, categoryColors } from "@/src/theme";
 
@@ -82,7 +82,7 @@ export default function Bollette() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Body style={{ fontFamily: fonts.medium, color: colors.onSurface }}>{cc.label} · {item.extracted?.fornitore || "—"}</Body>
-                  <Muted>{date} · {eur(item.analysis?.spesa_attuale_mese)}/mese</Muted>
+                  <Muted>{date}{item.extracted?.intestatario ? ` · ${item.extracted.intestatario}` : ""}</Muted>
                 </View>
                 <Badge label={st.label} tone={st.tone} />
               </Pressable>

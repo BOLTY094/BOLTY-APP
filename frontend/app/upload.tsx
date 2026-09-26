@@ -172,8 +172,8 @@ function Scanning() {
         <FilePdf size={72} color={colors.brandPrimary} weight="thin" />
         <Animated.View style={[s.scanLine, lineStyle]} />
       </Animated.View>
-      <H2 style={{ marginTop: spacing.xl }}>Analizziamo la tua bolletta…</H2>
-      <Muted style={{ marginTop: spacing.xs }}>Ci vuole solo un istante</Muted>
+      <H2 style={{ marginTop: spacing.xl }}>Stiamo leggendo la tua bolletta…</H2>
+      <Muted style={{ marginTop: spacing.xs, textAlign: "center", paddingHorizontal: spacing.xl }}>Rileviamo fornitore e intestatario dal documento. Può richiedere fino a 30 secondi.</Muted>
     </View>
   );
 }

@@ -63,7 +63,7 @@ export default function Forniture() {
                   <View style={{ flex: 1 }}>
                     <Muted>Ultima bolletta</Muted>
                     <Body style={{ fontFamily: fonts.medium, color: colors.onSurface }}>{lastBill.extracted?.fornitore || "—"}</Body>
-                    <Text style={[s.price, { color: colors.onSurface }]}>{eur(lastBill.analysis?.spesa_attuale_mese)} / mese</Text>
+                    <Text style={[s.price, { color: colors.onSurface }]}>{lastBill.extracted?.intestatario || statusMeta(lastBill.status).label}</Text>
                   </View>
                   <Badge label={statusMeta(lastBill.status).label} tone={statusMeta(lastBill.status).tone} />
                 </View>

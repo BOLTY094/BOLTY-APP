@@ -13,17 +13,12 @@ import { CategoryIcon } from "@/src/components/category-icon";
 import { H2, Muted, Button, TextField, Badge, Loader, eur, statusMeta } from "@/src/components/ui";
 import { makeStyles, useTheme, spacing, radius, fonts, fontSize, categoryColors } from "@/src/theme";
 
-const DATA_FIELDS = [
+const DATA_FIELDS: { key: string; label: string }[] = [
   { key: "fornitore", label: "Fornitore" },
-  { key: "tipo_contratto", label: "Tipo contratto" },
-  { key: "consumi", label: "Consumi" },
-  { key: "periodo_fatturazione", label: "Periodo" },
-  { key: "prezzo", label: "Prezzo", money: true },
-  { key: "quota_fissa", label: "Quota fissa", money: true },
-  { key: "trasporto", label: "Trasporto", money: true },
-  { key: "imposte", label: "Imposte", money: true },
-  { key: "altre_voci", label: "Altre voci", money: true },
-  { key: "totale", label: "Totale", money: true },
+  { key: "intestatario", label: "Intestatario" },
+  { key: "tipo_intestatario", label: "Tipo" },
+  { key: "codice_fiscale", label: "Codice fiscale" },
+  { key: "partita_iva", label: "Partita IVA" },
 ];
 
 export default function AdminBillDetail() {
@@ -51,10 +46,10 @@ export default function AdminBillDetail() {
       setProposed(String(existing.proposed_monthly ?? ""));
       setNotes(existing.notes || "");
     } else {
-      const m = bill.analysis?.spesa_attuale_mese || 0;
+      // No estimates: the consultant reads the amounts on the original bill
       setProvider("");
-      setCurrent(String(m));
-      setProposed(m ? (Math.round(m * 0.82 * 100) / 100).toString() : "");
+      setCurrent("");
+      setProposed("");
       setNotes("");
     }
   }, [bill]);
@@ -119,10 +114,18 @@ export default function AdminBillDetail() {
           {DATA_FIELDS.map((f, i) => (
             <View key={f.key} style={[s.dataRow, i !== DATA_FIELDS.length - 1 && s.border]}>
               <Muted>{f.label}</Muted>
-              <Text style={s.dataVal}>{f.money ? eur(bill.extracted?.[f.key]) : bill.extracted?.[f.key] || "—"}</Text>
+              <Text style={s.dataVal}>{bill.extracted?.[f.key] || "Non rilevato"}</Text>
             </View>
           ))}
         </View>
+
+        {bill.contact_request ? (
+          <View style={[s.card, { borderColor: colors.success }]} testID="admin-contact-request">
+            <Text style={s.cardTitle}>Il cliente chiede di essere ricontattato</Text>
+            <Text style={[s.dataVal, { maxWidth: "100%", textAlign: "left" }]}>{[bill.contact_request.email, bill.contact_request.phone].filter(Boolean).join(" · ")}</Text>
+            <Muted style={{ marginTop: 4 }}>Consenso prestato il {new Date(bill.contact_request.consent_at).toLocaleDateString("it-IT")}</Muted>
+          </View>
+        ) : null}
 
         <H2 style={{ marginTop: spacing.xl, marginBottom: spacing.sm }}>Proponi un’offerta</H2>
         <Muted style={{ marginBottom: spacing.lg }}>Controlla i valori e invia la proposta al cliente.</Muted>
@@ -160,6 +163,8 @@ const useStyles = makeStyles((colors) => ({
   dataRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: spacing.md, gap: spacing.md },
   border: { borderBottomWidth: 1, borderBottomColor: colors.divider },
   dataVal: { fontFamily: fonts.medium, fontSize: fontSize.base, color: colors.onSurface, maxWidth: "58%", textAlign: "right" },
+  card: { marginTop: spacing.lg, backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg, padding: spacing.lg, borderWidth: 1, borderColor: colors.border },
+  cardTitle: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.onSurface, marginBottom: spacing.xs },
   savingPreview: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderRadius: radius.lg, padding: spacing.lg, marginTop: spacing.md },
   savingVal: { fontFamily: fonts.semibold, fontSize: fontSize.xl, marginTop: 2 },
 }));

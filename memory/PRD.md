@@ -78,3 +78,10 @@ Piattaforma mobile dove il cliente carica la bolletta (luce/gas/telefonia), rice
 - Email service blocca destinatari finti (*@test.it) con 422 — usare delivered@resend.dev nei test.
 - Referral: rimossi "Invita e Guadagna" e €20 ovunque (home, referral, profilo, delete-account, legal, notifiche backend). Nuovo messaggio: "Invita un amico e regalagli l'esperienza di risparmiare sulle sue fatture." `REFERRAL_REWARD` default 0; il record di attivazione resta (conteggio Attivati).
 - Test iteration_7 (61/61) e iteration_8 (77/77 + UI).
+
+## Iterazione 9 — Occhiolino, estrazione reale, richiesta contatto, News (Set 2026)
+- Welcome: fulmine con occhiolino animato (frame `bolty-bolt-open.png` occhi aperti + overlay `bolty-bolt.png` con opacità 0→1→0→1), durata 3s.
+- Estrazione reale (`backend/extraction.py`): PDF → testo (pdfplumber); PDF scansionato/foto → immagini (pypdfium2/PIL) → modello vision. LLM GPT-5.4 via EMERGENT_LLM_KEY (`EXTRACTION_MODEL` env) restituisce SOLO fornitore, intestatario, tipo_intestatario, codice_fiscale, partita_iva; con testo disponibile ogni valore è verificato letteralmente nel documento altrimenti null → UI "Non rilevato". Nessuna stima: `analysis=null`, rimossi simulate_extraction/compute_analysis, "Correggi" limitato ai 4 campi. Test Duferco reale: Duferco Energia SpA / VERBA GROUP SRLS / 04137230928.
+- Richiesta contatto (`src/components/contact-request.tsx`, `POST /api/bills/{id}/contact`): email e/o telefono (validati), consenso obbligatorio con informativa + link privacy; salvato in `bill.contact_request`, email all'admin con dati bolletta + link file, notifica in-app; visibile nel dettaglio admin.
+- News (`backend/news.py`): feed RSS QualEnergia, Canale Energia, Rinnovabili.it (energia), ANSA Economia e Sole 24 Ore (filtrati per keyword energia); dedupe per link in `news`, refresh ogni 3 giorni (loop 6h), `GET /api/news` paginato, `POST /api/admin/news/refresh`; schermata `/news` + card Home.
+- Test iteration_9: 99/99 pytest + UI verificata.

@@ -4,12 +4,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { Bell, SignOut, Lightning, Flame, WifiHigh, ArrowRight, Gift, ChartLineUp, TrendDown, TrendUp } from "phosphor-react-native";
+import { Bell, SignOut, Lightning, Flame, WifiHigh, ArrowRight, Gift, ChartLineUp, TrendDown, TrendUp, Newspaper } from "phosphor-react-native";
 
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth-context";
 import { BoltyWordmark, BoltyBolt } from "@/src/components/logo";
-import { H1, H2, Body, Muted, eur, statusMeta, Badge } from "@/src/components/ui";
+import { H1, H2, Body, Muted, statusMeta, Badge } from "@/src/components/ui";
 import { CategoryIcon } from "@/src/components/category-icon";
 import { makeStyles, useTheme, spacing, radius, fonts, fontSize, categoryColors } from "@/src/theme";
 
@@ -29,6 +29,8 @@ export default function Home() {
   const { data: bills = [] } = useQuery({ queryKey: ["bills"], queryFn: () => api("/bills") });
   const { data: notifs = [] } = useQuery({ queryKey: ["notifications"], queryFn: () => api("/notifications") });
   const { data: market } = useQuery({ queryKey: ["market"], queryFn: () => api("/market/overview") });
+  const { data: newsData } = useQuery({ queryKey: ["news-latest"], queryFn: () => api("/news?limit=1") });
+  const latestNews = newsData?.items?.[0];
   const unread = (notifs as any[]).filter((n) => !n.read).length;
   const recent = (bills as any[]).slice(0, 3);
 
@@ -122,6 +124,20 @@ export default function Home() {
         </Pressable>
       </View>
 
+      {/* News */}
+      <View style={s.section}>
+        <Pressable style={({ pressed }) => [s.newsCard, pressed && { opacity: 0.9 }]} onPress={() => router.push("/news")} testID="home-news">
+          <View style={s.newsIcon}>
+            <Newspaper size={22} color={colors.brand} weight="fill" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.newsTitle}>News</Text>
+            <Text style={s.newsSub}>{latestNews ? latestNews.title : "Notizie reali su energia, gas e mercato libero"}</Text>
+          </View>
+          <ArrowRight size={20} color={colors.brand} weight="bold" />
+        </Pressable>
+      </View>
+
       {/* Referral promo */}
       <View style={s.section}>
         <Pressable style={s.referral} onPress={() => router.push("/referral")} testID="home-referral">
@@ -153,7 +169,7 @@ export default function Home() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Body style={{ fontFamily: fonts.medium, color: colors.onSurface }}>{cc.label} · {b.extracted?.fornitore || "—"}</Body>
-                  <Muted>{eur(b.analysis?.spesa_attuale_mese)} / mese</Muted>
+                  <Muted>{statusMeta(b.status).label}</Muted>
                 </View>
                 <Badge label={st.label} tone={st.tone} />
               </Pressable>
@@ -255,6 +271,10 @@ const useStyles = makeStyles((colors) => ({
   referralIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.accent, alignItems: "center", justifyContent: "center" },
   referralTitle: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.brand },
   referralSub: { fontFamily: fonts.regular, fontSize: fontSize.base, color: colors.onSurfaceTertiary, marginTop: 2 },
+  newsCard: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg, padding: spacing.lg, borderWidth: 1, borderColor: colors.border },
+  newsIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.accentSoft, alignItems: "center", justifyContent: "center" },
+  newsTitle: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.onSurface },
+  newsSub: { fontFamily: fonts.regular, fontSize: fontSize.base, color: colors.onSurfaceTertiary, marginTop: 2 },
   market: { backgroundColor: colors.brand, borderRadius: radius.lg, padding: spacing.lg },
   marketHead: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   marketIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.12)", alignItems: "center", justifyContent: "center" },

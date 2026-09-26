@@ -6,29 +6,24 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { CheckCircle, PencilSimple, Trash, ArrowRight, TrendUp, FileArrowDown } from "phosphor-react-native";
+import { CheckCircle, PencilSimple, Trash, ArrowRight, FileArrowDown } from "phosphor-react-native";
 
 import { api, API, loadToken } from "@/src/api";
 import { useToast } from "@/src/toast";
 import { ScreenHeader } from "@/src/components/screen-header";
 import { CategoryIcon } from "@/src/components/category-icon";
-import { H2, Muted, Button, TextField, Badge, Loader, eur, statusMeta } from "@/src/components/ui";
+import { H2, Muted, Button, TextField, Badge, Loader, statusMeta } from "@/src/components/ui";
+import { ContactRequest } from "@/src/components/contact-request";
 import { makeStyles, useTheme, spacing, radius, fonts, fontSize, categoryColors } from "@/src/theme";
 
+// Only data really printed on the bill. Amounts/consumption are never shown as extracted values.
 const TEXT_FIELDS: { key: string; label: string }[] = [
   { key: "fornitore", label: "Fornitore" },
-  { key: "tipo_contratto", label: "Tipo di contratto" },
-  { key: "consumi", label: "Consumi" },
-  { key: "periodo_fatturazione", label: "Periodo di fatturazione" },
+  { key: "intestatario", label: "Intestatario" },
+  { key: "codice_fiscale", label: "Codice fiscale" },
+  { key: "partita_iva", label: "Partita IVA" },
 ];
-const NUM_FIELDS: { key: string; label: string }[] = [
-  { key: "prezzo", label: "Prezzo unitario" },
-  { key: "quota_fissa", label: "Quota fissa" },
-  { key: "trasporto", label: "Trasporto" },
-  { key: "imposte", label: "Imposte" },
-  { key: "altre_voci", label: "Altre voci" },
-  { key: "totale", label: "Totale bolletta" },
-];
+const NOT_FOUND = "Non rilevato";
 
 export default function BillDetail() {
   const s = useStyles();
@@ -48,7 +43,7 @@ export default function BillDetail() {
   const startEdit = () => {
     const e = bill?.extracted || {};
     const f: Record<string, string> = {};
-    [...TEXT_FIELDS, ...NUM_FIELDS].forEach(({ key }) => {
+    TEXT_FIELDS.forEach(({ key }) => {
       f[key] = e[key] !== null && e[key] !== undefined ? String(e[key]) : "";
     });
     setForm(f);
@@ -58,8 +53,7 @@ export default function BillDetail() {
   const confirmMut = useMutation({
     mutationFn: () => {
       const extracted: Record<string, any> = {};
-      TEXT_FIELDS.forEach(({ key }) => (extracted[key] = form[key] || null));
-      NUM_FIELDS.forEach(({ key }) => (extracted[key] = form[key] ? parseFloat(form[key].replace(",", ".")) : null));
+      TEXT_FIELDS.forEach(({ key }) => (extracted[key] = form[key]?.trim() || null));
       return api(`/bills/${id}/confirm`, { method: "PUT", body: { extracted } });
     },
     onSuccess: () => {
@@ -67,7 +61,7 @@ export default function BillDetail() {
       qc.invalidateQueries({ queryKey: ["bills"] });
       qc.invalidateQueries({ queryKey: ["notifications"] });
       setEditing(false);
-      show("Dati confermati. Analisi aggiornata!", "success");
+      show("Dati confermati", "success");
     },
     onError: (e: any) => show(e.message || "Errore", "error"),
   });
@@ -90,7 +84,6 @@ export default function BillDetail() {
     );
   }
 
-  const a = bill.analysis || {};
   const st = statusMeta(bill.status);
 
   return (
@@ -114,8 +107,8 @@ export default function BillDetail() {
           <Animated.View entering={FadeInDown} style={[s.banner, { backgroundColor: colors.brandTertiary }]}>
             <CheckCircle size={26} color={colors.success} weight="fill" />
             <View style={{ flex: 1 }}>
-              <Text style={s.bannerTitle}>Abbiamo analizzato la tua bolletta</Text>
-              <Muted>Ecco la tua situazione attuale.</Muted>
+              <Text style={s.bannerTitle}>Abbiamo letto la tua bolletta</Text>
+              <Muted>Controlla i dati rilevati dal documento.</Muted>
             </View>
           </Animated.View>
         ) : (
@@ -148,23 +141,6 @@ export default function BillDetail() {
           </Pressable>
         ) : null}
 
-        {/* Analysis */}
-        <H2 style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>La tua situazione</H2>
-        <View style={s.analysisGrid}>
-          <Stat label="Spesa attuale" value={`${eur(a.spesa_attuale_mese)}`} suffix="/mese" />
-          <Stat label="Stima annua" value={eur(a.spesa_attuale_anno)} />
-          <Stat label="Consumo annuo" value={a.consumo_annuo_stimato || "—"} />
-          <Stat label="Costo medio" value={`${eur(a.costo_medio_mese)}`} suffix="/mese" />
-        </View>
-
-        <View style={[s.savingCard, { backgroundColor: cc.soft }]}>
-          <TrendUp size={22} color={cc.accent} weight="bold" />
-          <View style={{ flex: 1 }}>
-            <Muted>Possibile risparmio stimato</Muted>
-            <Text style={[s.savingValue, { color: cc.accent }]}>{eur(a.risparmio_possibile_anno)} / anno</Text>
-          </View>
-        </View>
-
         {/* Extracted data */}
         <View style={s.headRow}>
           <H2>Dati estratti</H2>
@@ -178,25 +154,28 @@ export default function BillDetail() {
 
         {editing ? (
           <View style={{ marginTop: spacing.md }}>
+            <Muted style={{ marginBottom: spacing.md }}>Riporta i dati esattamente come compaiono sulla bolletta. Lascia vuoto ciò che non è presente.</Muted>
             {TEXT_FIELDS.map((f) => (
-              <TextField key={f.key} label={f.label} value={form[f.key] || ""} onChangeText={(t) => setForm((p) => ({ ...p, [f.key]: t }))} testID={`edit-${f.key}`} />
-            ))}
-            {NUM_FIELDS.map((f) => (
-              <TextField key={f.key} label={`${f.label} (€)`} value={form[f.key] || ""} onChangeText={(t) => setForm((p) => ({ ...p, [f.key]: t }))} keyboardType="decimal-pad" testID={`edit-${f.key}`} />
+              <TextField key={f.key} label={f.label} value={form[f.key] || ""} onChangeText={(t) => setForm((p) => ({ ...p, [f.key]: t }))} autoCapitalize={f.key === "codice_fiscale" ? "characters" : "words"} optional testID={`edit-${f.key}`} />
             ))}
             <Button title="Conferma dati" onPress={() => confirmMut.mutate()} loading={confirmMut.isPending} testID="bill-confirm" />
             <Button title="Annulla" variant="ghost" onPress={() => setEditing(false)} />
           </View>
         ) : (
-          <View style={[s.dataCard, { marginTop: spacing.md }]}>
-            {TEXT_FIELDS.map((f, i) => (
-              <DataRow key={f.key} label={f.label} value={bill.extracted?.[f.key] || "—"} last={false} />
-            ))}
-            {NUM_FIELDS.map((f, i) => (
-              <DataRow key={f.key} label={f.label} value={eur(bill.extracted?.[f.key])} last={i === NUM_FIELDS.length - 1} highlight={f.key === "totale"} />
-            ))}
-          </View>
+          <>
+            <View style={[s.dataCard, { marginTop: spacing.md }]}>
+              {TEXT_FIELDS.map((f, i) => (
+                <DataRow key={f.key} label={f.label} value={bill.extracted?.[f.key] || NOT_FOUND} last={i === TEXT_FIELDS.length - 1} muted={!bill.extracted?.[f.key]} />
+              ))}
+            </View>
+            <Muted style={{ marginTop: spacing.sm, fontSize: fontSize.sm }}>
+              I dati provengono esclusivamente dal documento caricato. Consumi e importi non vengono stimati: li valuterà il consulente sulla bolletta originale.
+            </Muted>
+          </>
         )}
+
+        {/* Consultant call-back */}
+        <ContactRequest billId={bill.bill_id} existing={bill.contact_request} />
 
         {/* Offer CTA */}
         {bill.offer ? (
@@ -219,26 +198,13 @@ export default function BillDetail() {
   );
 }
 
-function Stat({ label, value, suffix }: { label: string; value: string; suffix?: string }) {
-  const s = useStyles();
-  return (
-    <View style={s.statBox}>
-      <Muted>{label}</Muted>
-      <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 3 }}>
-        <Text style={s.statValue} numberOfLines={1}>{value}</Text>
-        {suffix ? <Text style={s.statSuffix}>{suffix}</Text> : null}
-      </View>
-    </View>
-  );
-}
-
-function DataRow({ label, value, last, highlight }: { label: string; value: string; last: boolean; highlight?: boolean }) {
+function DataRow({ label, value, last, muted }: { label: string; value: string; last: boolean; muted?: boolean }) {
   const s = useStyles();
   const { colors } = useTheme();
   return (
-    <View style={[s.dataRow, !last && s.dataRowBorder]}>
+    <View style={[s.dataRow, !last && s.dataRowBorder]} testID={`data-${label}`}>
       <Muted>{label}</Muted>
-      <Text style={[s.dataValue, highlight && { fontFamily: fonts.semibold, color: colors.brandPrimary }]}>{value}</Text>
+      <Text style={[s.dataValue, muted && { color: colors.muted, fontFamily: fonts.regular }]}>{value}</Text>
     </View>
   );
 }
@@ -250,12 +216,6 @@ const useStyles = makeStyles((colors) => ({
   bannerTitle: { fontFamily: fonts.semibold, fontSize: fontSize.lg, color: colors.onSurface },
   statusRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   catBadge: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  analysisGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
-  statBox: { flexBasis: "47%", flexGrow: 1, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.border, gap: spacing.xs },
-  statValue: { fontFamily: fonts.semibold, fontSize: fontSize.xl, color: colors.onSurface },
-  statSuffix: { fontFamily: fonts.regular, fontSize: fontSize.base, color: colors.muted, marginBottom: 3 },
-  savingCard: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderRadius: radius.lg, padding: spacing.lg, marginTop: spacing.md },
-  savingValue: { fontFamily: fonts.semibold, fontSize: fontSize.xl, marginTop: 2 },
   headRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: spacing.xl },
   editBtn: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   editText: { color: colors.brandPrimary, fontFamily: fonts.medium, fontSize: fontSize.base },
